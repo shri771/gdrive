@@ -167,6 +167,22 @@ func (q *Queries) GetSubfolders(ctx context.Context, parentFolderID pgtype.UUID)
 	return items, nil
 }
 
+const renameFolder = `-- name: RenameFolder :exec
+UPDATE folders
+SET name = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type RenameFolderParams struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+}
+
+func (q *Queries) RenameFolder(ctx context.Context, arg RenameFolderParams) error {
+	_, err := q.db.Exec(ctx, renameFolder, arg.ID, arg.Name)
+	return err
+}
+
 const restoreFolder = `-- name: RestoreFolder :exec
 UPDATE folders
 SET status = 'active', trashed_at = NULL
@@ -186,21 +202,5 @@ WHERE id = $1
 
 func (q *Queries) TrashFolder(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, trashFolder, id)
-	return err
-}
-
-const updateFolderName = `-- name: UpdateFolderName :exec
-UPDATE folders
-SET name = $2, updated_at = NOW()
-WHERE id = $1
-`
-
-type UpdateFolderNameParams struct {
-	ID   pgtype.UUID `json:"id"`
-	Name string      `json:"name"`
-}
-
-func (q *Queries) UpdateFolderName(ctx context.Context, arg UpdateFolderNameParams) error {
-	_, err := q.db.Exec(ctx, updateFolderName, arg.ID, arg.Name)
 	return err
 }

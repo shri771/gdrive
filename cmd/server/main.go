@@ -129,6 +129,7 @@ func main() {
 				r.Delete("/", filesHandler.DeleteFile)
 				r.Post("/restore", filesHandler.RestoreFile)
 				r.Post("/star", filesHandler.ToggleStar)
+				r.Put("/{id}/rename", filesHandler.RenameFile)
 			})
 		})
 
@@ -137,6 +138,7 @@ func main() {
 			r.Get("/", foldersHandler.GetFolders)
 			r.Post("/", foldersHandler.CreateFolder)
 			r.Get("/root", foldersHandler.GetRootFolder)
+			r.Put("/{id}/rename", foldersHandler.RenameFolder)
 		})
 	})
 

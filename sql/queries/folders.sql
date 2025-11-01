@@ -16,7 +16,7 @@ SELECT * FROM folders
 WHERE owner_id = $1 AND is_root = TRUE
 LIMIT 1;
 
--- name: UpdateFolderName :exec
+-- name: RenameFolder :exec
 UPDATE folders
 SET name = $2, updated_at = NOW()
 WHERE id = $1;

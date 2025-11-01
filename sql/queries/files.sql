@@ -36,7 +36,7 @@ SELECT * FROM files
 WHERE owner_id = $1 AND status = 'trashed'
 ORDER BY trashed_at DESC;
 
--- name: UpdateFileName :exec
+-- name: RenameFile :exec
 UPDATE files
 SET name = $2, updated_at = NOW()
 WHERE id = $1;
