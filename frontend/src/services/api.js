@@ -114,6 +114,11 @@ export const filesAPI = {
     return response.data;
   },
 
+  getRecentFiles: async () => {
+    const response = await api.get('/files/recent');
+    return response.data;
+  },
+
   getStarredFiles: async () => {
     const response = await api.get('/files/starred');
     return response.data;

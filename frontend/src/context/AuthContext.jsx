@@ -1,45 +1,71 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../services/api';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const AuthContext = createContext(null);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check if user is logged in on mount
-    const token = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
-
-    if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data);
+      } else {
+        setUser(null);
+      }
+    } catch (error) {
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  useEffect(() => {
+    checkAuthStatus();
   }, []);
 
   const login = async (email, password) => {
-    const data = await authAPI.login(email, password);
-    setUser(data.user);
-    return data;
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setUser(data);
+      return data;
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to login');
+    }
   };
 
   const register = async (email, password, name) => {
-    const data = await authAPI.register(email, password, name);
-    setUser(data.user);
-    return data;
+    const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to register');
+    }
+    return await response.json();
   };
 
   const logout = async () => {
-    await authAPI.logout();
+    await fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' });
     setUser(null);
   };
 

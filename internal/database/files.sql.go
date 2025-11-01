@@ -361,6 +361,22 @@ func (q *Queries) PermanentDeleteFile(ctx context.Context, id pgtype.UUID) error
 	return err
 }
 
+const renameFile = `-- name: RenameFile :exec
+UPDATE files
+SET name = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type RenameFileParams struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+}
+
+func (q *Queries) RenameFile(ctx context.Context, arg RenameFileParams) error {
+	_, err := q.db.Exec(ctx, renameFile, arg.ID, arg.Name)
+	return err
+}
+
 const restoreFile = `-- name: RestoreFile :exec
 UPDATE files
 SET status = 'active', trashed_at = NULL
@@ -497,22 +513,6 @@ WHERE id = $1
 
 func (q *Queries) TrashFile(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, trashFile, id)
-	return err
-}
-
-const updateFileName = `-- name: UpdateFileName :exec
-UPDATE files
-SET name = $2, updated_at = NOW()
-WHERE id = $1
-`
-
-type UpdateFileNameParams struct {
-	ID   pgtype.UUID `json:"id"`
-	Name string      `json:"name"`
-}
-
-func (q *Queries) UpdateFileName(ctx context.Context, arg UpdateFileNameParams) error {
-	_, err := q.db.Exec(ctx, updateFileName, arg.ID, arg.Name)
 	return err
 }
 

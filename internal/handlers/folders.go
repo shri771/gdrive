@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shri771/gdrive/internal/database"
@@ -29,18 +30,18 @@ type CreateFolderRequest struct {
 func (h *FoldersHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	var req CreateFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Name == "" {
-		http.Error(w, "folder name is required", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "folder name is required")
 		return
 	}
 
@@ -48,7 +49,7 @@ func (h *FoldersHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 	if req.ParentFolderID != "" {
 		parsedUUID, err := uuid.Parse(req.ParentFolderID)
 		if err != nil {
-			http.Error(w, "invalid parent_folder_id", http.StatusBadRequest)
+			respondWithError(w, http.StatusBadRequest, "invalid parent_folder_id")
 			return
 		}
 		parentFolderID = pgtype.UUID{Bytes: parsedUUID, Valid: true}
@@ -61,7 +62,7 @@ func (h *FoldersHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 		IsRoot:         pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
-		http.Error(w, "failed to create folder", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to create folder")
 		return
 	}
 
@@ -73,7 +74,7 @@ func (h *FoldersHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -88,14 +89,14 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 	} else {
 		folderID, err := uuid.Parse(folderIDStr)
 		if err != nil {
-			http.Error(w, "invalid folder_id", http.StatusBadRequest)
+			respondWithError(w, http.StatusBadRequest, "invalid folder_id")
 			return
 		}
 		folders, err = h.queries.GetSubfolders(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
 	}
 
 	if err != nil {
-		http.Error(w, "failed to get folders", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to get folders")
 		return
 	}
 
@@ -107,16 +108,75 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 func (h *FoldersHandler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	folder, err := h.queries.GetRootFolder(r.Context(), session.UserID)
 	if err != nil {
-		http.Error(w, "root folder not found", http.StatusNotFound)
+		respondWithError(w, http.StatusNotFound, "root folder not found")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(folder)
+}
+
+type RenameFolderRequest struct {
+	NewName string `json:"new_name"`
+}
+
+// RenameFolder renames a folder
+func (h *FoldersHandler) RenameFolder(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folderIDStr := chi.URLParam(r, "id")
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
+		return
+	}
+
+	var req RenameFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.NewName == "" {
+		respondWithError(w, http.StatusBadRequest, "new name is required")
+		return
+	}
+
+	// Get folder to check ownership
+	dbFolder, err := h.queries.GetFolderByID(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "folder not found")
+		return
+	}
+
+	if dbFolder.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Rename folder in database
+	if err := h.queries.RenameFolder(r.Context(), database.RenameFolderParams{
+		ID:   pgtype.UUID{Bytes: folderID, Valid: true},
+		Name: req.NewName,
+	}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to rename folder")
+		return
+	}
+
+	// Note: Activity logging for folders is not yet implemented in the schema
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "folder renamed successfully",
+	})
+
 }

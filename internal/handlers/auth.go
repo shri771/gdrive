@@ -41,20 +41,20 @@ type AuthResponse struct {
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	// Validate input
 	if req.Email == "" || req.Password == "" || req.Name == "" {
-		http.Error(w, "email, password, and name are required", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "email, password, and name are required")
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := h.authService.HashPassword(req.Password)
 	if err != nil {
-		http.Error(w, "failed to hash password", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to hash password")
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Name:           req.Name,
 	})
 	if err != nil {
-		http.Error(w, "failed to create user: email may already exist", http.StatusConflict)
+		respondWithError(w, http.StatusConflict, "failed to create user: email may already exist")
 		return
 	}
 
@@ -76,14 +76,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		IsRoot:   pgtype.Bool{Bool: true, Valid: true},
 	})
 	if err != nil {
-		http.Error(w, "failed to create root folder", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to create root folder")
 		return
 	}
 
 	// Generate session token
 	token, err := h.authService.GenerateSessionToken()
 	if err != nil {
-		http.Error(w, "failed to generate session token", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to generate session token")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: pgtype.Timestamp{Time: expiresAt, Valid: true},
 	})
 	if err != nil {
-		http.Error(w, "failed to create session", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
@@ -122,33 +122,33 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	// Validate input
 	if req.Email == "" || req.Password == "" {
-		http.Error(w, "email and password are required", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "email and password are required")
 		return
 	}
 
 	// Get user by email
 	user, err := h.queries.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
-		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	// Check password
 	if err := h.authService.CheckPassword(user.HashedPassword, req.Password); err != nil {
-		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	// Generate session token
 	token, err := h.authService.GenerateSessionToken()
 	if err != nil {
-		http.Error(w, "failed to generate session token", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to generate session token")
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: pgtype.Timestamp{Time: expiresAt, Valid: true},
 	})
 	if err != nil {
-		http.Error(w, "failed to create session", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
@@ -188,13 +188,13 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Get token from cookie
 	cookie, err := r.Cookie("session_token")
 	if err != nil {
-		http.Error(w, "no session found", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "no session found")
 		return
 	}
 
 	// Delete session from database
 	if err := h.queries.DeleteSession(r.Context(), cookie.Value); err != nil {
-		http.Error(w, "failed to delete session", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to delete session")
 		return
 	}
 
@@ -230,28 +230,28 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if token == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	// Get session
 	session, err := h.queries.GetSessionByToken(r.Context(), token)
 	if err != nil {
-		http.Error(w, "invalid or expired session", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "invalid or expired session")
 		return
 	}
 
 	// Get full user details
 	user, err := h.queries.GetUserByID(r.Context(), session.UserID)
 	if err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
+		respondWithError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
 	// Get storage usage
 	storage, err := h.queries.GetStorageUsage(r.Context(), user.ID)
 	if err != nil {
-		http.Error(w, "failed to get storage usage", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to get storage usage")
 		return
 	}
 

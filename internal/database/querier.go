@@ -45,6 +45,8 @@ type Querier interface {
 	LogActivity(ctx context.Context, arg LogActivityParams) error
 	MoveFile(ctx context.Context, arg MoveFileParams) error
 	PermanentDeleteFile(ctx context.Context, id pgtype.UUID) error
+	RenameFile(ctx context.Context, arg RenameFileParams) error
+	RenameFolder(ctx context.Context, arg RenameFolderParams) error
 	RestoreFile(ctx context.Context, id pgtype.UUID) error
 	RestoreFolder(ctx context.Context, id pgtype.UUID) error
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
@@ -53,8 +55,6 @@ type Querier interface {
 	ToggleStarFile(ctx context.Context, id pgtype.UUID) error
 	TrashFile(ctx context.Context, id pgtype.UUID) error
 	TrashFolder(ctx context.Context, id pgtype.UUID) error
-	UpdateFileName(ctx context.Context, arg UpdateFileNameParams) error
-	UpdateFolderName(ctx context.Context, arg UpdateFolderNameParams) error
 	UpdateLastAccessed(ctx context.Context, id pgtype.UUID) error
 	UpdateUserStorage(ctx context.Context, arg UpdateUserStorageParams) error
 }

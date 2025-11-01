@@ -32,20 +32,20 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	// Get user from context
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	// Parse multipart form (max 500MB)
 	if err := r.ParseMultipartForm(500 << 20); err != nil {
-		http.Error(w, "failed to parse form", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "failed to parse form")
 		return
 	}
 
 	// Get file from form
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "no file provided", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "no file provided")
 		return
 	}
 	defer file.Close()
@@ -56,7 +56,7 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if folderIDStr != "" {
 		parsedUUID, err := uuid.Parse(folderIDStr)
 		if err != nil {
-			http.Error(w, "invalid folder_id", http.StatusBadRequest)
+			respondWithError(w, http.StatusBadRequest, "invalid folder_id")
 			return
 		}
 		folderID = pgtype.UUID{Bytes: parsedUUID, Valid: true}
@@ -74,7 +74,7 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		1, // version 1
 	)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to save file: %v", err), http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save file: %v", err))
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Cleanup: delete the uploaded file
 		h.storageService.DeleteFile(storagePath)
-		http.Error(w, "failed to create file record", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to create file record")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) GetFiles(w http.ResponseWriter, r *http.Request) {
 	_, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -142,14 +142,14 @@ func (h *FilesHandler) GetFiles(w http.ResponseWriter, r *http.Request) {
 	} else {
 		folderID, err := uuid.Parse(folderIDStr)
 		if err != nil {
-			http.Error(w, "invalid folder_id", http.StatusBadRequest)
+			respondWithError(w, http.StatusBadRequest, "invalid folder_id")
 			return
 		}
 		files, err = h.queries.GetFilesByFolder(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
 	}
 
 	if err != nil {
-		http.Error(w, "failed to get files", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to get files")
 		return
 	}
 
@@ -161,7 +161,7 @@ func (h *FilesHandler) GetFiles(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) GetRecentFiles(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -170,7 +170,7 @@ func (h *FilesHandler) GetRecentFiles(w http.ResponseWriter, r *http.Request) {
 		Limit:   20,
 	})
 	if err != nil {
-		http.Error(w, "failed to get recent files", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to get recent files")
 		return
 	}
 
@@ -182,13 +182,13 @@ func (h *FilesHandler) GetRecentFiles(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) GetStarredFiles(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	files, err := h.queries.GetStarredFiles(r.Context(), session.UserID)
 	if err != nil {
-		http.Error(w, "failed to get starred files", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to get starred files")
 		return
 	}
 
@@ -200,13 +200,13 @@ func (h *FilesHandler) GetStarredFiles(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) GetTrashedFiles(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	files, err := h.queries.GetTrashedFiles(r.Context(), session.UserID)
 	if err != nil {
-		http.Error(w, "failed to get trashed files", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to get trashed files")
 		return
 	}
 
@@ -218,34 +218,34 @@ func (h *FilesHandler) GetTrashedFiles(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	fileIDStr := chi.URLParam(r, "id")
 	fileID, err := uuid.Parse(fileIDStr)
 	if err != nil {
-		http.Error(w, "invalid file ID", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
 		return
 	}
 
 	// Get file from database
 	dbFile, err := h.queries.GetFileByID(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
 	if err != nil {
-		http.Error(w, "file not found", http.StatusNotFound)
+		respondWithError(w, http.StatusNotFound, "file not found")
 		return
 	}
 
 	// Check ownership
 	if dbFile.OwnerID != session.UserID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		respondWithError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	// Open file from storage
 	file, err := h.storageService.GetFile(dbFile.StoragePath)
 	if err != nil {
-		http.Error(w, "failed to open file", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to open file")
 		return
 	}
 	defer file.Close()
@@ -266,32 +266,32 @@ func (h *FilesHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	fileIDStr := chi.URLParam(r, "id")
 	fileID, err := uuid.Parse(fileIDStr)
 	if err != nil {
-		http.Error(w, "invalid file ID", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
 		return
 	}
 
 	// Get file to check ownership
 	dbFile, err := h.queries.GetFileByID(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
 	if err != nil {
-		http.Error(w, "file not found", http.StatusNotFound)
+		respondWithError(w, http.StatusNotFound, "file not found")
 		return
 	}
 
 	if dbFile.OwnerID != session.UserID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		respondWithError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	// Move to trash
 	if err := h.queries.TrashFile(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true}); err != nil {
-		http.Error(w, "failed to delete file", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to delete file")
 		return
 	}
 
@@ -312,20 +312,20 @@ func (h *FilesHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) RestoreFile(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	fileIDStr := chi.URLParam(r, "id")
 	fileID, err := uuid.Parse(fileIDStr)
 	if err != nil {
-		http.Error(w, "invalid file ID", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
 		return
 	}
 
 	// Restore file
 	if err := h.queries.RestoreFile(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true}); err != nil {
-		http.Error(w, "failed to restore file", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to restore file")
 		return
 	}
 
@@ -346,20 +346,20 @@ func (h *FilesHandler) RestoreFile(w http.ResponseWriter, r *http.Request) {
 func (h *FilesHandler) ToggleStar(w http.ResponseWriter, r *http.Request) {
 	_, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	fileIDStr := chi.URLParam(r, "id")
 	fileID, err := uuid.Parse(fileIDStr)
 	if err != nil {
-		http.Error(w, "invalid file ID", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
 		return
 	}
 
 	// Toggle star
 	if err := h.queries.ToggleStarFile(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true}); err != nil {
-		http.Error(w, "failed to toggle star", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to toggle star")
 		return
 	}
 
@@ -375,7 +375,7 @@ func (h *FilesHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query().Get("q")
 	if query == "" {
-		http.Error(w, "search query required", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "search query required")
 		return
 	}
 
@@ -385,10 +385,75 @@ func (h *FilesHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		Limit:          50,
 	})
 	if err != nil {
-		http.Error(w, "failed to search files", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "failed to search files")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
+}
+
+type RenameFileRequest struct {
+	NewName string `json:"new_name"`
+}
+
+// RenameFile renames a file
+func (h *FilesHandler) RenameFile(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	fileIDStr := chi.URLParam(r, "id")
+	fileID, err := uuid.Parse(fileIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
+		return
+	}
+
+	var req RenameFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.NewName == "" {
+		respondWithError(w, http.StatusBadRequest, "new name is required")
+		return
+	}
+
+	// Get file to check ownership
+	dbFile, err := h.queries.GetFileByID(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "file not found")
+		return
+	}
+
+	if dbFile.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Rename file in database
+	if err := h.queries.RenameFile(r.Context(), database.RenameFileParams{
+		ID:   pgtype.UUID{Bytes: fileID, Valid: true},
+		Name: req.NewName,
+	}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to rename file")
+		return
+	}
+
+	// Log activity
+	h.queries.LogActivity(r.Context(), database.LogActivityParams{
+		UserID:       session.UserID,
+		FileID:       pgtype.UUID{Bytes: fileID, Valid: true},
+		ActivityType: database.ActivityTypeRename,
+		Details:      json.RawMessage(fmt.Sprintf(`{"old_name": "%s", "new_name": "%s"}`, dbFile.Name, req.NewName)),
+	})
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "file renamed successfully",
+	})
+
 }
