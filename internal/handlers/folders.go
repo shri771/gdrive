@@ -87,8 +87,8 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 		// Get root folders (folders with no parent, excluding the root "My Drive" folder)
 		folders, err = h.queries.GetRootFolders(r.Context(), session.UserID)
 	} else {
-		folderID, parseErr := uuid.Parse(folderIDStr)
-		if parseErr != nil {
+		folderID, err := uuid.Parse(folderIDStr)
+		if err != nil {
 			respondWithError(w, http.StatusBadRequest, "invalid folder_id")
 			return
 		}
@@ -122,42 +122,8 @@ func (h *FoldersHandler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(folder)
 }
 
-// GetFolderByIDHandler returns a specific folder by ID
-func (h *FoldersHandler) GetFolderByIDHandler(w http.ResponseWriter, r *http.Request) {
-	session, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		respondWithError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	folderIDStr := chi.URLParam(r, "id")
-	folderID, err := uuid.Parse(folderIDStr)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
-		return
-	}
-
-	folder, err := h.queries.GetFolderByID(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "folder not found")
-		return
-	}
-
-	if folder.OwnerID != session.UserID {
-		respondWithError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(folder)
-}
-
 type RenameFolderRequest struct {
 	NewName string `json:"new_name"`
-}
-
-type MoveFolderRequest struct {
-	ParentFolderID string `json:"parent_folder_id"` // Can be empty for root
 }
 
 // RenameFolder renames a folder
@@ -212,87 +178,5 @@ func (h *FoldersHandler) RenameFolder(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "folder renamed successfully",
 	})
-}
 
-// MoveFolder moves a folder to a different parent folder
-func (h *FoldersHandler) MoveFolder(w http.ResponseWriter, r *http.Request) {
-	session, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		respondWithError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	folderIDStr := chi.URLParam(r, "id")
-	folderID, err := uuid.Parse(folderIDStr)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
-		return
-	}
-
-	var req MoveFolderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	// Get folder to check ownership
-	dbFolder, err := h.queries.GetFolderByID(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "folder not found")
-		return
-	}
-
-	if dbFolder.OwnerID != session.UserID {
-		respondWithError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
-	// Can't move root folder
-	if dbFolder.IsRoot.Bool {
-		respondWithError(w, http.StatusBadRequest, "cannot move root folder")
-		return
-	}
-
-	// Parse parent folder ID
-	var parentFolderID pgtype.UUID
-	if req.ParentFolderID != "" {
-		parsedUUID, err := uuid.Parse(req.ParentFolderID)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "invalid parent_folder_id")
-			return
-		}
-		parentFolderID = pgtype.UUID{Bytes: parsedUUID, Valid: true}
-
-		// Verify parent folder exists and user owns it
-		parentFolder, err := h.queries.GetFolderByID(r.Context(), parentFolderID)
-		if err != nil {
-			respondWithError(w, http.StatusNotFound, "parent folder not found")
-			return
-		}
-		if parentFolder.OwnerID != session.UserID {
-			respondWithError(w, http.StatusForbidden, "forbidden")
-			return
-		}
-
-		// Can't move folder into itself
-		if parsedUUID == folderID {
-			respondWithError(w, http.StatusBadRequest, "cannot move folder into itself")
-			return
-		}
-	} else {
-		parentFolderID = pgtype.UUID{Valid: false} // Move to root
-	}
-
-	// Move folder in database
-	if err := h.queries.MoveFolder(r.Context(), database.MoveFolderParams{
-		ID:             pgtype.UUID{Bytes: folderID, Valid: true},
-		ParentFolderID: parentFolderID,
-	}); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to move folder")
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, map[string]string{
-		"message": "folder moved successfully",
-	})
 }

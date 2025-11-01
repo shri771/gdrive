@@ -131,8 +131,7 @@ func main() {
 				r.Delete("/", filesHandler.DeleteFile)
 				r.Post("/restore", filesHandler.RestoreFile)
 				r.Post("/star", filesHandler.ToggleStar)
-				r.Put("/rename", filesHandler.RenameFile)
-				r.Put("/move", filesHandler.MoveFile)
+				r.Put("/{id}/rename", filesHandler.RenameFile)
 			})
 		})
 
@@ -141,22 +140,7 @@ func main() {
 			r.Get("/", foldersHandler.GetFolders)
 			r.Post("/", foldersHandler.CreateFolder)
 			r.Get("/root", foldersHandler.GetRootFolder)
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", foldersHandler.GetFolderByIDHandler)
-				r.Put("/rename", foldersHandler.RenameFolder)
-				r.Put("/move", foldersHandler.MoveFolder)
-			})
-		})
-
-		// Sharing routes
-		r.Route("/sharing", func(r chi.Router) {
-			r.Post("/share", sharingHandler.ShareItem)
-			r.Get("/permissions", sharingHandler.GetItemPermissions)
-			r.Post("/revoke", sharingHandler.RevokePermission)
-			r.Post("/link", sharingHandler.CreateShareLink)
-			r.Get("/links", sharingHandler.GetShareLinks)
-			r.Delete("/link/{id}", sharingHandler.DeactivateShareLink)
-			r.Get("/shared-with-me", sharingHandler.GetSharedWithMe)
+			r.Put("/{id}/rename", foldersHandler.RenameFolder)
 		})
 	})
 

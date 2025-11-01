@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { filesAPI, foldersAPI } from '../services/api';
@@ -6,9 +6,8 @@ import { useDropzone } from 'react-dropzone';
 import {
   Search, Grid3x3, List, Settings, HelpCircle, Menu, Home,
   Clock, Star, Trash2, Upload, FolderPlus, ChevronDown,
-  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2
+  Download, StarOff, X, FileText, File, Folder, MoreVertical
 } from 'lucide-react';
-import ShareDialog from '../components/ShareDialog';
 import './Dashboard.css';
 
 const Dashboard = ({ view = 'my-drive' }) => {
@@ -24,14 +23,8 @@ const Dashboard = ({ view = 'my-drive' }) => {
   const [uploading, setUploading] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-  const [shareDialog, setShareDialog] = useState({ show: false, item: null, type: null });
-  const [currentFolder, setCurrentFolder] = useState(null);
-  const [folderPath, setFolderPath] = useState([{ id: null, name: 'My Drive' }]);
-  const [draggedItem, setDraggedItem] = useState(null);
-  const [dragOverFolder, setDragOverFolder] = useState(null);
-  const fileInputRef = useRef(null);
 
-  const currentView = view || (location.pathname === '/recent' ? 'recent' :
+  const currentView = view || (location.pathname === '/recent' ? 'recent' : 
                                location.pathname === '/starred' ? 'starred' :
                                location.pathname === '/trash' ? 'trash' : 'my-drive');
 
@@ -56,8 +49,8 @@ const Dashboard = ({ view = 'my-drive' }) => {
           setFolders([]);
           break;
         default:
-          const filesData = await filesAPI.getFiles(currentFolder);
-          const foldersData = await foldersAPI.getFolders(currentFolder);
+          const filesData = await filesAPI.getFiles();
+          const foldersData = await foldersAPI.getFolders();
           setFiles(filesData || []);
           setFolders(foldersData || []);
       }
@@ -66,25 +59,17 @@ const Dashboard = ({ view = 'my-drive' }) => {
     } finally {
       setLoading(false);
     }
-  }, [currentView, currentFolder]);
+  }, [currentView]);
 
   useEffect(() => {
     loadFiles();
   }, [loadFiles]);
 
-  // Reset folder navigation when switching views
-  useEffect(() => {
-    if (currentView !== 'my-drive') {
-      setCurrentFolder(null);
-      setFolderPath([{ id: null, name: 'My Drive' }]);
-    }
-  }, [currentView]);
-
   const onDrop = useCallback(async (acceptedFiles) => {
     setUploading(true);
     try {
       for (const file of acceptedFiles) {
-        await filesAPI.uploadFile(file, currentFolder);
+        await filesAPI.uploadFile(file);
       }
       await loadFiles();
     } catch (error) {
@@ -93,7 +78,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
     } finally {
       setUploading(false);
     }
-  }, [loadFiles, currentFolder]);
+  }, [loadFiles]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -157,128 +142,12 @@ const Dashboard = ({ view = 'my-drive' }) => {
     const name = prompt('Folder name:');
     if (name) {
       try {
-        await foldersAPI.createFolder(name, currentFolder);
+        await foldersAPI.createFolder(name);
         await loadFiles();
       } catch (error) {
         console.error('Create folder error:', error);
         alert('Failed to create folder');
       }
-    }
-  };
-
-  const handleShare = (item, type) => {
-    setShareDialog({ show: true, item, type });
-  };
-
-  const closeShareDialog = () => {
-    setShareDialog({ show: false, item: null, type: null });
-  };
-
-  const handleFileInputChange = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    setUploading(true);
-    try {
-      for (const file of files) {
-        await filesAPI.uploadFile(file, currentFolder);
-      }
-      await loadFiles();
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to upload files');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleUploadClick = () => {
-    setShowCreateMenu(false);
-    fileInputRef.current?.click();
-  };
-
-  // Folder navigation handlers
-  const handleFolderClick = async (folder) => {
-    if (currentView !== 'my-drive') return; // Only allow navigation in My Drive view
-
-    setCurrentFolder(folder.id);
-    setFolderPath([...folderPath, { id: folder.id, name: folder.name }]);
-  };
-
-  const handleBreadcrumbClick = (index) => {
-    const newPath = folderPath.slice(0, index + 1);
-    setFolderPath(newPath);
-    setCurrentFolder(newPath[newPath.length - 1].id);
-  };
-
-  // Drag and drop handlers
-  const handleDragStart = (e, item, type) => {
-    setDraggedItem({ ...item, itemType: type });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDragEnterFolder = (e, folder) => {
-    e.preventDefault();
-    setDragOverFolder(folder.id);
-  };
-
-  const handleDragLeaveFolder = (e) => {
-    e.preventDefault();
-    setDragOverFolder(null);
-  };
-
-  const handleDropOnFolder = async (e, targetFolder) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverFolder(null);
-
-    if (!draggedItem) return;
-
-    try {
-      if (draggedItem.itemType === 'file') {
-        await filesAPI.moveFile(draggedItem.id, targetFolder.id);
-      } else if (draggedItem.itemType === 'folder') {
-        // Can't drop folder into itself
-        if (draggedItem.id === targetFolder.id) {
-          alert('Cannot move folder into itself');
-          return;
-        }
-        await foldersAPI.moveFolder(draggedItem.id, targetFolder.id);
-      }
-      await loadFiles();
-    } catch (error) {
-      console.error('Move error:', error);
-      alert('Failed to move item');
-    } finally {
-      setDraggedItem(null);
-    }
-  };
-
-  const handleDropOnBackground = async (e) => {
-    e.preventDefault();
-
-    if (!draggedItem || currentView !== 'my-drive') return;
-
-    try {
-      if (draggedItem.itemType === 'file') {
-        await filesAPI.moveFile(draggedItem.id, currentFolder);
-      } else if (draggedItem.itemType === 'folder') {
-        await foldersAPI.moveFolder(draggedItem.id, currentFolder);
-      }
-      await loadFiles();
-    } catch (error) {
-      console.error('Move error:', error);
-      alert('Failed to move item');
-    } finally {
-      setDraggedItem(null);
     }
   };
 
@@ -325,16 +194,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
   return (
     <div className="dashboard" {...getRootProps()}>
       <input {...getInputProps()} />
-
-      {/* Hidden file input for button upload */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleFileInputChange}
-      />
-
+      
       {/* Header */}
       <header className="drive-header">
         <div className="header-left">
@@ -367,17 +227,16 @@ const Dashboard = ({ view = 'my-drive' }) => {
         </div>
 
         <div className="header-right">
-          <button className="icon-btn" title="Help">
+          <button className="icon-btn">
             <HelpCircle size={20} />
           </button>
-          <button className="icon-btn" title="Settings">
+          <button className="icon-btn">
             <Settings size={20} />
           </button>
           <div className="user-menu">
-            <button
+            <button 
               className="user-avatar"
               onClick={() => setShowUserMenu(!showUserMenu)}
-              title={user?.email || 'Profile'}
             >
               {user?.name?.[0]?.toUpperCase() || 'U'}
             </button>
@@ -392,13 +251,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     <div className="user-email">{user?.email}</div>
                   </div>
                 </div>
-                <div className="user-menu-divider"></div>
-                <button className="menu-item" onClick={() => navigate('/settings')}>
-                  <Settings size={16} />
-                  Settings
-                </button>
-                <button className="menu-item" onClick={handleLogout}>
-                  <Upload size={16} style={{ transform: 'rotate(180deg)' }} />
+                <button onClick={handleLogout} className="logout-btn">
                   Sign out
                 </button>
               </div>
@@ -432,23 +285,22 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     New folder
                   </button>
                   <hr />
-                  <button onClick={handleUploadClick}>
+                  <button onClick={() => document.querySelector('input[type="file"]').click()}>
                     <Upload size={20} />
                     File upload
                   </button>
+                  {index < folderPath.length - 1 && (
+                    <ChevronDown size={16} style={{ transform: 'rotate(-90deg)' }} />
+                  )}
                 </div>
               )}
             </div>
           </div>
 
           <nav className="sidebar-nav">
-            <button
+            <button 
               className={`nav-item ${currentView === 'my-drive' ? 'active' : ''}`}
-              onClick={() => {
-                setCurrentFolder(null);
-                setFolderPath([{ id: null, name: 'My Drive' }]);
-                navigate('/');
-              }}
+              onClick={() => navigate('/')}
             >
               <Home size={20} />
               <span>My Drive</span>
@@ -478,17 +330,17 @@ const Dashboard = ({ view = 'my-drive' }) => {
         </aside>
 
         {/* Main Content */}
-        <main className="main-content" onDrop={handleDropOnBackground} onDragOver={handleDragOver}>
+        <main className="main-content">
           <div className="content-header">
             <h2>{getViewTitle()}</h2>
             <div className="view-controls">
-              <button
+              <button 
                 className={`icon-btn ${viewMode === 'list' ? 'active' : ''}`}
                 onClick={() => setViewMode('list')}
               >
                 <List size={20} />
               </button>
-              <button
+              <button 
                 className={`icon-btn ${viewMode === 'grid' ? 'active' : ''}`}
                 onClick={() => setViewMode('grid')}
               >
@@ -496,36 +348,6 @@ const Dashboard = ({ view = 'my-drive' }) => {
               </button>
             </div>
           </div>
-
-          {/* Breadcrumb Navigation */}
-          {currentView === 'my-drive' && folderPath.length > 0 && (
-            <div className="breadcrumb-nav" style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#5f6368' }}>
-              {folderPath.map((folder, index) => (
-                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => handleBreadcrumbClick(index)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: index === folderPath.length - 1 ? '#202124' : '#5f6368',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      fontWeight: index === folderPath.length - 1 ? '500' : '400',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                    }}
-                    onMouseEnter={(e) => e.target.style.background = '#f1f3f4'}
-                    onMouseLeave={(e) => e.target.style.background = 'none'}
-                  >
-                    {folder.name}
-                  </button>
-                  {index < folderPath.length - 1 && (
-                    <ChevronDown size={16} style={{ transform: 'rotate(-90deg)' }} />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
 
           {isDragActive && (
             <div className="drop-overlay">
@@ -538,7 +360,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
 
           {uploading && (
             <div className="upload-progress">
-              Uploading files to {currentFolder ? folderPath[folderPath.length - 1]?.name || 'folder' : 'My Drive'}...
+              Uploading files...
             </div>
           )}
 
@@ -552,36 +374,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     <div className="file-section">
                       <div className="section-header">Folders</div>
                       {folders.map((folder) => (
-                        <div
-                          key={folder.id}
-                          className="file-item"
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, folder, 'folder')}
-                          onDragOver={handleDragOver}
-                          onDragEnter={(e) => handleDragEnterFolder(e, folder)}
-                          onDragLeave={handleDragLeaveFolder}
-                          onDrop={(e) => handleDropOnFolder(e, folder)}
-                          style={{
-                            cursor: 'pointer',
-                            backgroundColor: dragOverFolder === folder.id ? '#e8f0fe' : 'transparent',
-                            transition: 'background-color 0.2s'
-                          }}
-                        >
-                          <div className="file-info" onClick={() => handleFolderClick(folder)} onDoubleClick={() => handleFolderClick(folder)}>
+                        <div key={folder.id} className="file-item">
+                          <div className="file-info">
                             {getFileIcon(folder.name, true)}
                             <span className="file-name">{folder.name}</span>
                           </div>
                           <div className="file-owner">me</div>
                           <div className="file-modified">{formatDate(folder.created_at)}</div>
                           <div className="file-size">-</div>
-                          <div className="file-actions" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className="icon-btn-small"
-                              onClick={(e) => { e.stopPropagation(); handleShare(folder, 'folder'); }}
-                              title="Share"
-                            >
-                              <Share2 size={16} />
-                            </button>
+                          <div className="file-actions">
                             <button className="icon-btn-small">
                               <MoreVertical size={16} />
                             </button>
@@ -595,12 +396,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     <div className="file-section">
                       {folders.length > 0 && <div className="section-header">Files</div>}
                       {files.map((file) => (
-                        <div
-                          key={file.id}
-                          className="file-item"
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, file, 'file')}
-                        >
+                        <div key={file.id} className="file-item">
                           <div className="file-info">
                             {getFileIcon(file.name, false)}
                             <span className="file-name">{file.name}</span>
@@ -626,21 +422,14 @@ const Dashboard = ({ view = 'my-drive' }) => {
                               </button>
                             ) : (
                               <>
-                                <button
-                                  className="icon-btn-small"
-                                  onClick={() => handleShare(file, 'file')}
-                                  title="Share"
-                                >
-                                  <Share2 size={16} />
-                                </button>
-                                <button
+                                <button 
                                   className="icon-btn-small"
                                   onClick={() => handleDownload(file)}
                                   title="Download"
                                 >
                                   <Download size={16} />
                                 </button>
-                                <button
+                                <button 
                                   className="icon-btn-small"
                                   onClick={() => handleDelete(file.id)}
                                   title="Move to trash"
@@ -657,53 +446,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                   
                   {files.length === 0 && folders.length === 0 && (
                     <div className="empty-state">
-                      {currentView === 'recent' && (
-                        <>
-                          <p>No recent files</p>
-                          <p className="empty-subtitle">Files you open will appear here</p>
-                        </>
-                      )}
-                      {currentView === 'starred' && (
-                        <>
-                          <p>No starred files</p>
-                          <p className="empty-subtitle">Star files to easily find them later</p>
-                        </>
-                      )}
-                      {currentView === 'trash' && (
-                        <>
-                          <p>Trash is empty</p>
-                          <p className="empty-subtitle">Items in trash will be deleted forever after 30 days</p>
-                        </>
-                      )}
-                      {currentView === 'my-drive' && (
-                        <>
-                          <p>No files yet</p>
-                          <p className="empty-subtitle">Drop files here or use the New button to upload</p>
-                        </>
-                      )}
+                      <p>No files yet</p>
+                      <p className="empty-subtitle">Drop files here or use the New button</p>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="file-grid">
                   {folders.map((folder) => (
-                    <div
-                      key={folder.id}
-                      className="grid-item"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, folder, 'folder')}
-                      onDragOver={handleDragOver}
-                      onDragEnter={(e) => handleDragEnterFolder(e, folder)}
-                      onDragLeave={handleDragLeaveFolder}
-                      onDrop={(e) => handleDropOnFolder(e, folder)}
-                      onClick={() => handleFolderClick(folder)}
-                      onDoubleClick={() => handleFolderClick(folder)}
-                      style={{
-                        cursor: 'pointer',
-                        backgroundColor: dragOverFolder === folder.id ? '#e8f0fe' : 'transparent',
-                        transition: 'background-color 0.2s'
-                      }}
-                    >
+                    <div key={folder.id} className="grid-item">
                       <div className="grid-item-preview folder-preview">
                         <Folder size={32} />
                       </div>
@@ -713,12 +464,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     </div>
                   ))}
                   {files.map((file) => (
-                    <div
-                      key={file.id}
-                      className="grid-item"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, file, 'file')}
-                    >
+                    <div key={file.id} className="grid-item">
                       <div className="grid-item-preview">
                         {getFileIcon(file.name, false)}
                       </div>
@@ -729,30 +475,8 @@ const Dashboard = ({ view = 'my-drive' }) => {
                   ))}
                   {files.length === 0 && folders.length === 0 && (
                     <div className="empty-state">
-                      {currentView === 'recent' && (
-                        <>
-                          <p>No recent files</p>
-                          <p className="empty-subtitle">Files you open will appear here</p>
-                        </>
-                      )}
-                      {currentView === 'starred' && (
-                        <>
-                          <p>No starred files</p>
-                          <p className="empty-subtitle">Star files to easily find them later</p>
-                        </>
-                      )}
-                      {currentView === 'trash' && (
-                        <>
-                          <p>Trash is empty</p>
-                          <p className="empty-subtitle">Items in trash will be deleted forever after 30 days</p>
-                        </>
-                      )}
-                      {currentView === 'my-drive' && (
-                        <>
-                          <p>No files yet</p>
-                          <p className="empty-subtitle">Drop files here or use the New button to upload</p>
-                        </>
-                      )}
+                      <p>No files yet</p>
+                      <p className="empty-subtitle">Drop files here or use the New button</p>
                     </div>
                   )}
                 </div>

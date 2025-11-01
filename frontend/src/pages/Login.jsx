@@ -8,14 +8,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
-
-  // Redirect when authentication succeeds
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/', { replace: true });
-    }
-  }, [isAuthenticated, navigate]);
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,6 +19,7 @@ const Login = () => {
       // Navigation will happen via useEffect when isAuthenticated changes
     } catch (err) {
       setError(err.message || 'Failed to login');
+    } finally {
       setLoading(false);
     }
   };

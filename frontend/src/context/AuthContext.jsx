@@ -15,11 +15,10 @@ export const AuthProvider = ({ children }) => {
       const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Send cookies
       });
       if (response.ok) {
         const data = await response.json();
-        setUser(data.user || data);
+        setUser(data);
       } else {
         setUser(null);
       }
@@ -38,13 +37,12 @@ export const AuthProvider = ({ children }) => {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // Send/receive cookies
       body: JSON.stringify({ email, password }),
     });
 
     if (response.ok) {
       const data = await response.json();
-      setUser(data.user || data);
+      setUser(data);
       return data;
     } else {
       const errorData = await response.json();
@@ -56,7 +54,6 @@ export const AuthProvider = ({ children }) => {
     const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // Send/receive cookies
       body: JSON.stringify({ email, password, name }),
     });
 
@@ -64,16 +61,11 @@ export const AuthProvider = ({ children }) => {
       const errorData = await response.json();
       throw new Error(errorData.message || 'Failed to register');
     }
-    const data = await response.json();
-    setUser(data.user || data);
-    return data;
+    return await response.json();
   };
 
   const logout = async () => {
-    await fetch(`${API_BASE_URL}/api/auth/logout`, {
-      method: 'POST',
-      credentials: 'include', // Send cookies
-    });
+    await fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST' });
     setUser(null);
   };
 

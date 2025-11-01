@@ -207,7 +207,23 @@ func (q *Queries) GetSubfolders(ctx context.Context, parentFolderID pgtype.UUID)
 	return items, nil
 }
 
-const moveFolder = `-- name: MoveFolder :exec
+const renameFolder = `-- name: RenameFolder :exec
+UPDATE folders
+SET name = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type RenameFolderParams struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+}
+
+func (q *Queries) RenameFolder(ctx context.Context, arg RenameFolderParams) error {
+	_, err := q.db.Exec(ctx, renameFolder, arg.ID, arg.Name)
+	return err
+}
+
+const restoreFolder = `-- name: RestoreFolder :exec
 UPDATE folders
 SET parent_folder_id = $2, updated_at = NOW()
 WHERE id = $1
@@ -236,27 +252,5 @@ type RenameFolderParams struct {
 
 func (q *Queries) RenameFolder(ctx context.Context, arg RenameFolderParams) error {
 	_, err := q.db.Exec(ctx, renameFolder, arg.ID, arg.Name)
-	return err
-}
-
-const restoreFolder = `-- name: RestoreFolder :exec
-UPDATE folders
-SET status = 'active', trashed_at = NULL
-WHERE id = $1
-`
-
-func (q *Queries) RestoreFolder(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, restoreFolder, id)
-	return err
-}
-
-const trashFolder = `-- name: TrashFolder :exec
-UPDATE folders
-SET status = 'trashed', trashed_at = NOW()
-WHERE id = $1
-`
-
-func (q *Queries) TrashFolder(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, trashFolder, id)
 	return err
 }
