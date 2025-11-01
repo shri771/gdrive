@@ -1,0 +1,264 @@
+.share-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.share-dialog {
+  background: white;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.share-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e8eaed;
+}
+
+.share-dialog-header h2 {
+  font-size: 22px;
+  font-weight: 400;
+  color: #202124;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #5f6368;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: #f1f3f4;
+}
+
+.share-dialog-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.access-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #5f6368;
+  margin-bottom: 12px;
+}
+
+.access-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+}
+
+.access-icon {
+  color: #5f6368;
+  display: flex;
+  align-items: center;
+}
+
+.access-info {
+  flex: 1;
+}
+
+.access-select {
+  font-size: 16px;
+  font-weight: 500;
+  color: #202124;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  outline: none;
+}
+
+.access-select:hover {
+  text-decoration: underline;
+}
+
+.access-description {
+  font-size: 13px;
+  color: #5f6368;
+  margin-top: 2px;
+}
+
+.permission-select {
+  padding: 8px 12px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #202124;
+  background: white;
+  cursor: pointer;
+  outline: none;
+}
+
+.permission-select:hover {
+  border-color: #5f6368;
+}
+
+.permission-select:focus {
+  border-color: #1a73e8;
+}
+
+.link-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.link-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+}
+
+.link-icon {
+  color: #5f6368;
+  flex-shrink: 0;
+}
+
+.link-input {
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #202124;
+  flex: 1;
+  min-width: 0;
+}
+
+.copy-link-btn {
+  padding: 8px 16px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+
+.copy-link-btn:hover {
+  background: #1557b0;
+}
+
+.copy-link-btn:active {
+  background: #0d47a1;
+}
+
+.owner-section {
+  border-top: 1px solid #e8eaed;
+  padding-top: 16px;
+}
+
+.owner-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.owner-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #1a73e8;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.owner-info {
+  flex: 1;
+}
+
+.owner-name {
+  font-size: 14px;
+  color: #202124;
+  font-weight: 500;
+}
+
+.owner-email {
+  font-size: 13px;
+  color: #5f6368;
+  margin-top: 2px;
+}
+
+.share-dialog-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e8eaed;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.done-btn {
+  padding: 10px 24px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.done-btn:hover {
+  background: #1557b0;
+}
+
+.done-btn:active {
+  background: #0d47a1;
+}

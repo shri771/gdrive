@@ -1,0 +1,206 @@
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:1030/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add token to requests if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Auth API
+export const authAPI = {
+  register: async (email, password, name) => {
+    const response = await api.post('/auth/register', { email, password, name });
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  login: async (email, password) => {
+    const response = await api.post('/auth/login', { email, password });
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
+
+  logout: async () => {
+    await api.post('/auth/logout');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  },
+
+  me: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+  },
+};
+
+// Files API
+export const filesAPI = {
+  getFiles: async (folderId = '') => {
+    const params = folderId ? `?folder_id=${folderId}` : '';
+    const response = await api.get(`/files${params}`);
+    return response.data;
+  },
+
+  uploadFile: async (file, folderId = '') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (folderId) {
+      formData.append('folder_id', folderId);
+    }
+
+    const response = await api.post('/files/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  downloadFile: async (fileId) => {
+    const response = await api.get(`/files/${fileId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  deleteFile: async (fileId) => {
+    const response = await api.delete(`/files/${fileId}`);
+    return response.data;
+  },
+
+  restoreFile: async (fileId) => {
+    const response = await api.post(`/files/${fileId}/restore`);
+    return response.data;
+  },
+
+  toggleStar: async (fileId) => {
+    const response = await api.post(`/files/${fileId}/star`);
+    return response.data;
+  },
+
+  getRecentFiles: async () => {
+    const response = await api.get('/files/recent');
+    return response.data;
+  },
+
+  getRecentFiles: async () => {
+    const response = await api.get('/files/recent');
+    return response.data;
+  },
+
+  getStarredFiles: async () => {
+    const response = await api.get('/files/starred');
+    return response.data;
+  },
+
+  getTrashedFiles: async () => {
+    const response = await api.get('/files/trash');
+    return response.data;
+  },
+
+  searchFiles: async (query) => {
+    const response = await api.get(`/files/search?q=${encodeURIComponent(query)}`);
+    return response.data;
+  },
+
+  moveFile: async (fileId, folderId) => {
+    const response = await api.put(`/files/${fileId}/move`, {
+      folder_id: folderId || '',
+    });
+    return response.data;
+  },
+};
+
+// Folders API
+export const foldersAPI = {
+  getFolders: async (parentId = '') => {
+    const params = parentId ? `?parent_id=${parentId}` : '';
+    const response = await api.get(`/folders${params}`);
+    return response.data;
+  },
+
+  createFolder: async (name, parentFolderId = '') => {
+    const response = await api.post('/folders', {
+      name,
+      parent_folder_id: parentFolderId,
+    });
+    return response.data;
+  },
+
+  getRootFolder: async () => {
+    const response = await api.get('/folders/root');
+    return response.data;
+  },
+
+  getFolderById: async (folderId) => {
+    const response = await api.get(`/folders/${folderId}`);
+    return response.data;
+  },
+
+  moveFolder: async (folderId, parentFolderId) => {
+    const response = await api.put(`/folders/${folderId}/move`, {
+      parent_folder_id: parentFolderId || '',
+    });
+    return response.data;
+  },
+};
+
+// Sharing API
+export const sharingAPI = {
+  createShareLink: async (itemType, itemId, permission = 'viewer') => {
+    const response = await api.post('/sharing/link', {
+      item_type: itemType,
+      item_id: itemId,
+      permission,
+    });
+    return response.data;
+  },
+
+  getShareLinks: async (itemType, itemId) => {
+    const response = await api.get(`/sharing/links?item_type=${itemType}&item_id=${itemId}`);
+    return response.data;
+  },
+
+  deactivateShareLink: async (linkId) => {
+    const response = await api.delete(`/sharing/link/${linkId}`);
+    return response.data;
+  },
+
+  getItemPermissions: async (itemType, itemId) => {
+    const response = await api.get(`/sharing/permissions?item_type=${itemType}&item_id=${itemId}`);
+    return response.data;
+  },
+};
+
+export default api;
