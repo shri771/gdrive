@@ -14,9 +14,9 @@ import (
 const createFile = `-- name: CreateFile :one
 INSERT INTO files (
     name, original_name, mime_type, size, storage_path,
-    owner_id, parent_folder_id, preview_available
+    owner_id, parent_folder_id, preview_available, thumbnail_path
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at
 `
 
@@ -29,6 +29,7 @@ type CreateFileParams struct {
 	OwnerID          pgtype.UUID `json:"owner_id"`
 	ParentFolderID   pgtype.UUID `json:"parent_folder_id"`
 	PreviewAvailable pgtype.Bool `json:"preview_available"`
+	ThumbnailPath    pgtype.Text `json:"thumbnail_path"`
 }
 
 func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (File, error) {
@@ -41,6 +42,7 @@ func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) (File, e
 		arg.OwnerID,
 		arg.ParentFolderID,
 		arg.PreviewAvailable,
+		arg.ThumbnailPath,
 	)
 	var i File
 	err := row.Scan(
@@ -98,12 +100,19 @@ func (q *Queries) GetFileByID(ctx context.Context, id pgtype.UUID) (File, error)
 
 const getFilesByFolder = `-- name: GetFilesByFolder :many
 SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files
-WHERE parent_folder_id = $1 AND status = 'active'
+WHERE owner_id = $1
+  AND parent_folder_id = $2
+  AND status = 'active'
 ORDER BY created_at DESC
 `
 
-func (q *Queries) GetFilesByFolder(ctx context.Context, parentFolderID pgtype.UUID) ([]File, error) {
-	rows, err := q.db.Query(ctx, getFilesByFolder, parentFolderID)
+type GetFilesByFolderParams struct {
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	ParentFolderID pgtype.UUID `json:"parent_folder_id"`
+}
+
+func (q *Queries) GetFilesByFolder(ctx context.Context, arg GetFilesByFolderParams) ([]File, error) {
+	rows, err := q.db.Query(ctx, getFilesByFolder, arg.OwnerID, arg.ParentFolderID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +216,53 @@ type GetRecentFilesParams struct {
 
 func (q *Queries) GetRecentFiles(ctx context.Context, arg GetRecentFilesParams) ([]File, error) {
 	rows, err := q.db.Query(ctx, getRecentFiles, arg.OwnerID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []File{}
+	for rows.Next() {
+		var i File
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OriginalName,
+			&i.MimeType,
+			&i.Size,
+			&i.StoragePath,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.Status,
+			&i.IsStarred,
+			&i.ThumbnailPath,
+			&i.PreviewAvailable,
+			&i.Version,
+			&i.CurrentVersionID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRootFiles = `-- name: GetRootFiles :many
+SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files
+WHERE owner_id = $1
+  AND parent_folder_id IS NULL
+  AND status = 'active'
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetRootFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error) {
+	rows, err := q.db.Query(ctx, getRootFiles, ownerID)
 	if err != nil {
 		return nil, err
 	}

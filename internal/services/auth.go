@@ -57,3 +57,12 @@ func (a *AuthService) GenerateShareToken() (string, error) {
 	}
 	return hex.EncodeToString(bytes), nil
 }
+
+// GenerateRandomToken generates a random token with specified byte size
+func (a *AuthService) GenerateRandomToken(size int) (string, error) {
+	bytes := make([]byte, size)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate token: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}

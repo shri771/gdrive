@@ -21,6 +21,11 @@ UPDATE folders
 SET name = $2, updated_at = NOW()
 WHERE id = $1;
 
+-- name: MoveFolder :exec
+UPDATE folders
+SET parent_folder_id = $2, updated_at = NOW()
+WHERE id = $1;
+
 -- name: TrashFolder :exec
 UPDATE folders
 SET status = 'trashed', trashed_at = NOW()
@@ -34,4 +39,12 @@ WHERE id = $1;
 -- name: GetFoldersByOwner :many
 SELECT * FROM folders
 WHERE owner_id = $1 AND status = 'active'
+ORDER BY name ASC;
+
+-- name: GetRootFolders :many
+SELECT * FROM folders
+WHERE owner_id = $1
+  AND parent_folder_id IS NULL
+  AND is_root = FALSE
+  AND status = 'active'
 ORDER BY name ASC;

@@ -11,32 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createFilePermission = `-- name: CreateFilePermission :one
-INSERT INTO file_permissions (file_id, user_id, role, granted_by)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (file_id, user_id)
+const createPermission = `-- name: CreatePermission :one
+INSERT INTO permissions (item_type, item_id, user_id, role, granted_by)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (item_type, item_id, user_id)
 DO UPDATE SET role = EXCLUDED.role
-RETURNING id, file_id, user_id, role, granted_by, created_at
+RETURNING id, item_type, item_id, user_id, role, granted_by, created_at
 `
 
-type CreateFilePermissionParams struct {
-	FileID    pgtype.UUID    `json:"file_id"`
+type CreatePermissionParams struct {
+	ItemType  ItemType       `json:"item_type"`
+	ItemID    pgtype.UUID    `json:"item_id"`
 	UserID    pgtype.UUID    `json:"user_id"`
 	Role      PermissionRole `json:"role"`
 	GrantedBy pgtype.UUID    `json:"granted_by"`
 }
 
-func (q *Queries) CreateFilePermission(ctx context.Context, arg CreateFilePermissionParams) (FilePermission, error) {
-	row := q.db.QueryRow(ctx, createFilePermission,
-		arg.FileID,
+func (q *Queries) CreatePermission(ctx context.Context, arg CreatePermissionParams) (Permission, error) {
+	row := q.db.QueryRow(ctx, createPermission,
+		arg.ItemType,
+		arg.ItemID,
 		arg.UserID,
 		arg.Role,
 		arg.GrantedBy,
 	)
-	var i FilePermission
+	var i Permission
 	err := row.Scan(
 		&i.ID,
-		&i.FileID,
+		&i.ItemType,
+		&i.ItemID,
 		&i.UserID,
 		&i.Role,
 		&i.GrantedBy,
@@ -45,32 +48,35 @@ func (q *Queries) CreateFilePermission(ctx context.Context, arg CreateFilePermis
 	return i, err
 }
 
-const createShareLink = `-- name: CreateShareLink :one
-INSERT INTO share_links (file_id, token, created_by, permission, expires_at)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, file_id, token, created_by, permission, expires_at, is_active, created_at
+const createShare = `-- name: CreateShare :one
+INSERT INTO shares (item_type, item_id, token, created_by, permission, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, item_type, item_id, token, created_by, permission, expires_at, is_active, created_at
 `
 
-type CreateShareLinkParams struct {
-	FileID     pgtype.UUID        `json:"file_id"`
+type CreateShareParams struct {
+	ItemType   ItemType           `json:"item_type"`
+	ItemID     pgtype.UUID        `json:"item_id"`
 	Token      string             `json:"token"`
 	CreatedBy  pgtype.UUID        `json:"created_by"`
 	Permission NullPermissionRole `json:"permission"`
 	ExpiresAt  pgtype.Timestamp   `json:"expires_at"`
 }
 
-func (q *Queries) CreateShareLink(ctx context.Context, arg CreateShareLinkParams) (ShareLink, error) {
-	row := q.db.QueryRow(ctx, createShareLink,
-		arg.FileID,
+func (q *Queries) CreateShare(ctx context.Context, arg CreateShareParams) (Share, error) {
+	row := q.db.QueryRow(ctx, createShare,
+		arg.ItemType,
+		arg.ItemID,
 		arg.Token,
 		arg.CreatedBy,
 		arg.Permission,
 		arg.ExpiresAt,
 	)
-	var i ShareLink
+	var i Share
 	err := row.Scan(
 		&i.ID,
-		&i.FileID,
+		&i.ItemType,
+		&i.ItemID,
 		&i.Token,
 		&i.CreatedBy,
 		&i.Permission,
@@ -81,25 +87,31 @@ func (q *Queries) CreateShareLink(ctx context.Context, arg CreateShareLinkParams
 	return i, err
 }
 
-const deactivateShareLink = `-- name: DeactivateShareLink :exec
-UPDATE share_links SET is_active = FALSE WHERE id = $1
+const deactivateShare = `-- name: DeactivateShare :exec
+UPDATE shares SET is_active = FALSE WHERE id = $1
 `
 
-func (q *Queries) DeactivateShareLink(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deactivateShareLink, id)
+func (q *Queries) DeactivateShare(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deactivateShare, id)
 	return err
 }
 
-const getFilePermissions = `-- name: GetFilePermissions :many
-SELECT fp.id, fp.file_id, fp.user_id, fp.role, fp.granted_by, fp.created_at, u.email, u.name as user_name
-FROM file_permissions fp
-JOIN users u ON fp.user_id = u.id
-WHERE fp.file_id = $1
+const getItemPermissions = `-- name: GetItemPermissions :many
+SELECT p.id, p.item_type, p.item_id, p.user_id, p.role, p.granted_by, p.created_at, u.email, u.name as user_name
+FROM permissions p
+JOIN users u ON p.user_id = u.id
+WHERE p.item_type = $1 AND p.item_id = $2
 `
 
-type GetFilePermissionsRow struct {
+type GetItemPermissionsParams struct {
+	ItemType ItemType    `json:"item_type"`
+	ItemID   pgtype.UUID `json:"item_id"`
+}
+
+type GetItemPermissionsRow struct {
 	ID        pgtype.UUID      `json:"id"`
-	FileID    pgtype.UUID      `json:"file_id"`
+	ItemType  ItemType         `json:"item_type"`
+	ItemID    pgtype.UUID      `json:"item_id"`
 	UserID    pgtype.UUID      `json:"user_id"`
 	Role      PermissionRole   `json:"role"`
 	GrantedBy pgtype.UUID      `json:"granted_by"`
@@ -108,18 +120,19 @@ type GetFilePermissionsRow struct {
 	UserName  string           `json:"user_name"`
 }
 
-func (q *Queries) GetFilePermissions(ctx context.Context, fileID pgtype.UUID) ([]GetFilePermissionsRow, error) {
-	rows, err := q.db.Query(ctx, getFilePermissions, fileID)
+func (q *Queries) GetItemPermissions(ctx context.Context, arg GetItemPermissionsParams) ([]GetItemPermissionsRow, error) {
+	rows, err := q.db.Query(ctx, getItemPermissions, arg.ItemType, arg.ItemID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetFilePermissionsRow{}
+	items := []GetItemPermissionsRow{}
 	for rows.Next() {
-		var i GetFilePermissionsRow
+		var i GetItemPermissionsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.FileID,
+			&i.ItemType,
+			&i.ItemID,
 			&i.UserID,
 			&i.Role,
 			&i.GrantedBy,
@@ -137,16 +150,17 @@ func (q *Queries) GetFilePermissions(ctx context.Context, fileID pgtype.UUID) ([
 	return items, nil
 }
 
-const getShareLinkByToken = `-- name: GetShareLinkByToken :one
-SELECT id, file_id, token, created_by, permission, expires_at, is_active, created_at FROM share_links WHERE token = $1 AND is_active = TRUE
+const getShareByToken = `-- name: GetShareByToken :one
+SELECT id, item_type, item_id, token, created_by, permission, expires_at, is_active, created_at FROM shares WHERE token = $1 AND is_active = TRUE
 `
 
-func (q *Queries) GetShareLinkByToken(ctx context.Context, token string) (ShareLink, error) {
-	row := q.db.QueryRow(ctx, getShareLinkByToken, token)
-	var i ShareLink
+func (q *Queries) GetShareByToken(ctx context.Context, token string) (Share, error) {
+	row := q.db.QueryRow(ctx, getShareByToken, token)
+	var i Share
 	err := row.Scan(
 		&i.ID,
-		&i.FileID,
+		&i.ItemType,
+		&i.ItemID,
 		&i.Token,
 		&i.CreatedBy,
 		&i.Permission,
@@ -157,45 +171,12 @@ func (q *Queries) GetShareLinkByToken(ctx context.Context, token string) (ShareL
 	return i, err
 }
 
-const getShareLinksByFile = `-- name: GetShareLinksByFile :many
-SELECT id, file_id, token, created_by, permission, expires_at, is_active, created_at FROM share_links WHERE file_id = $1 AND is_active = TRUE
-`
-
-func (q *Queries) GetShareLinksByFile(ctx context.Context, fileID pgtype.UUID) ([]ShareLink, error) {
-	rows, err := q.db.Query(ctx, getShareLinksByFile, fileID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ShareLink{}
-	for rows.Next() {
-		var i ShareLink
-		if err := rows.Scan(
-			&i.ID,
-			&i.FileID,
-			&i.Token,
-			&i.CreatedBy,
-			&i.Permission,
-			&i.ExpiresAt,
-			&i.IsActive,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getSharedWithMeFiles = `-- name: GetSharedWithMeFiles :many
-SELECT f.id, f.name, f.original_name, f.mime_type, f.size, f.storage_path, f.owner_id, f.parent_folder_id, f.status, f.is_starred, f.thumbnail_path, f.preview_available, f.version, f.current_version_id, f.created_at, f.updated_at, f.trashed_at, f.last_accessed_at, u.name as owner_name, fp.role
+SELECT f.id, f.name, f.original_name, f.mime_type, f.size, f.storage_path, f.owner_id, f.parent_folder_id, f.status, f.is_starred, f.thumbnail_path, f.preview_available, f.version, f.current_version_id, f.created_at, f.updated_at, f.trashed_at, f.last_accessed_at, u.name as owner_name, p.role
 FROM files f
-JOIN file_permissions fp ON f.id = fp.file_id
+JOIN permissions p ON p.item_type = 'file' AND p.item_id = f.id
 JOIN users u ON f.owner_id = u.id
-WHERE fp.user_id = $1 AND f.status = 'active'
+WHERE p.user_id = $1 AND f.status = 'active'
 `
 
 type GetSharedWithMeFilesRow struct {
@@ -262,22 +243,119 @@ func (q *Queries) GetSharedWithMeFiles(ctx context.Context, userID pgtype.UUID) 
 	return items, nil
 }
 
-const getUserPermissionForFile = `-- name: GetUserPermissionForFile :one
-SELECT id, file_id, user_id, role, granted_by, created_at FROM file_permissions
-WHERE file_id = $1 AND user_id = $2
+const getSharedWithMeFolders = `-- name: GetSharedWithMeFolders :many
+SELECT fo.id, fo.name, fo.owner_id, fo.parent_folder_id, fo.is_root, fo.status, fo.is_starred, fo.created_at, fo.updated_at, fo.trashed_at, u.name as owner_name, p.role
+FROM folders fo
+JOIN permissions p ON p.item_type = 'folder' AND p.item_id = fo.id
+JOIN users u ON fo.owner_id = u.id
+WHERE p.user_id = $1 AND fo.status = 'active'
 `
 
-type GetUserPermissionForFileParams struct {
-	FileID pgtype.UUID `json:"file_id"`
-	UserID pgtype.UUID `json:"user_id"`
+type GetSharedWithMeFoldersRow struct {
+	ID             pgtype.UUID      `json:"id"`
+	Name           string           `json:"name"`
+	OwnerID        pgtype.UUID      `json:"owner_id"`
+	ParentFolderID pgtype.UUID      `json:"parent_folder_id"`
+	IsRoot         pgtype.Bool      `json:"is_root"`
+	Status         NullFileStatus   `json:"status"`
+	IsStarred      pgtype.Bool      `json:"is_starred"`
+	CreatedAt      pgtype.Timestamp `json:"created_at"`
+	UpdatedAt      pgtype.Timestamp `json:"updated_at"`
+	TrashedAt      pgtype.Timestamp `json:"trashed_at"`
+	OwnerName      string           `json:"owner_name"`
+	Role           PermissionRole   `json:"role"`
 }
 
-func (q *Queries) GetUserPermissionForFile(ctx context.Context, arg GetUserPermissionForFileParams) (FilePermission, error) {
-	row := q.db.QueryRow(ctx, getUserPermissionForFile, arg.FileID, arg.UserID)
-	var i FilePermission
+func (q *Queries) GetSharedWithMeFolders(ctx context.Context, userID pgtype.UUID) ([]GetSharedWithMeFoldersRow, error) {
+	rows, err := q.db.Query(ctx, getSharedWithMeFolders, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetSharedWithMeFoldersRow{}
+	for rows.Next() {
+		var i GetSharedWithMeFoldersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.IsRoot,
+			&i.Status,
+			&i.IsStarred,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+			&i.OwnerName,
+			&i.Role,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSharesByItem = `-- name: GetSharesByItem :many
+SELECT id, item_type, item_id, token, created_by, permission, expires_at, is_active, created_at FROM shares WHERE item_type = $1 AND item_id = $2 AND is_active = TRUE
+`
+
+type GetSharesByItemParams struct {
+	ItemType ItemType    `json:"item_type"`
+	ItemID   pgtype.UUID `json:"item_id"`
+}
+
+func (q *Queries) GetSharesByItem(ctx context.Context, arg GetSharesByItemParams) ([]Share, error) {
+	rows, err := q.db.Query(ctx, getSharesByItem, arg.ItemType, arg.ItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Share{}
+	for rows.Next() {
+		var i Share
+		if err := rows.Scan(
+			&i.ID,
+			&i.ItemType,
+			&i.ItemID,
+			&i.Token,
+			&i.CreatedBy,
+			&i.Permission,
+			&i.ExpiresAt,
+			&i.IsActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserPermissionForItem = `-- name: GetUserPermissionForItem :one
+SELECT id, item_type, item_id, user_id, role, granted_by, created_at FROM permissions
+WHERE item_type = $1 AND item_id = $2 AND user_id = $3
+`
+
+type GetUserPermissionForItemParams struct {
+	ItemType ItemType    `json:"item_type"`
+	ItemID   pgtype.UUID `json:"item_id"`
+	UserID   pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetUserPermissionForItem(ctx context.Context, arg GetUserPermissionForItemParams) (Permission, error) {
+	row := q.db.QueryRow(ctx, getUserPermissionForItem, arg.ItemType, arg.ItemID, arg.UserID)
+	var i Permission
 	err := row.Scan(
 		&i.ID,
-		&i.FileID,
+		&i.ItemType,
+		&i.ItemID,
 		&i.UserID,
 		&i.Role,
 		&i.GrantedBy,
@@ -287,16 +365,17 @@ func (q *Queries) GetUserPermissionForFile(ctx context.Context, arg GetUserPermi
 }
 
 const revokePermission = `-- name: RevokePermission :exec
-DELETE FROM file_permissions
-WHERE file_id = $1 AND user_id = $2
+DELETE FROM permissions
+WHERE item_type = $1 AND item_id = $2 AND user_id = $3
 `
 
 type RevokePermissionParams struct {
-	FileID pgtype.UUID `json:"file_id"`
-	UserID pgtype.UUID `json:"user_id"`
+	ItemType ItemType    `json:"item_type"`
+	ItemID   pgtype.UUID `json:"item_id"`
+	UserID   pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) RevokePermission(ctx context.Context, arg RevokePermissionParams) error {
-	_, err := q.db.Exec(ctx, revokePermission, arg.FileID, arg.UserID)
+	_, err := q.db.Exec(ctx, revokePermission, arg.ItemType, arg.ItemID, arg.UserID)
 	return err
 }

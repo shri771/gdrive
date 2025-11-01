@@ -105,7 +105,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Value:    session.Token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
+		SameSite: http.SameSiteLaxMode, // Lax for localhost development
 		Secure:   false, // Set to true in production with HTTPS
 		MaxAge:   int(expiresAt.Unix() - session.CreatedAt.Time.Unix()),
 	})
@@ -170,7 +170,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    session.Token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
+		SameSite: http.SameSiteLaxMode, // Lax for localhost development
 		Secure:   false, // Set to true in production with HTTPS
 		MaxAge:   int(expiresAt.Unix() - session.CreatedAt.Time.Unix()),
 	})

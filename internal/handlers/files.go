@@ -85,6 +85,18 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		previewAvailable = true
 	}
 
+	// Generate thumbnail if it's an image
+	var thumbnailPath pgtype.Text
+	if len(mimeType) >= 6 && mimeType[:6] == "image/" {
+		thumbPath, err := h.storageService.GenerateThumbnail(storagePath, mimeType, fileID)
+		if err != nil {
+			// Log error but don't fail the upload
+			fmt.Printf("failed to generate thumbnail: %v\n", err)
+		} else {
+			thumbnailPath = pgtype.Text{String: thumbPath, Valid: true}
+		}
+	}
+
 	// Create file record in database
 	dbFile, err := h.queries.CreateFile(r.Context(), database.CreateFileParams{
 		Name:             header.Filename,
@@ -95,6 +107,7 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		OwnerID:          session.UserID,
 		ParentFolderID:   folderID,
 		PreviewAvailable: pgtype.Bool{Bool: previewAvailable, Valid: true},
+		ThumbnailPath:    thumbnailPath,
 	})
 	if err != nil {
 		// Cleanup: delete the uploaded file
@@ -125,7 +138,7 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 // GetFiles returns files in a folder or root files
 func (h *FilesHandler) GetFiles(w http.ResponseWriter, r *http.Request) {
-	_, ok := middleware.GetUserFromContext(r.Context())
+	session, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -138,14 +151,17 @@ func (h *FilesHandler) GetFiles(w http.ResponseWriter, r *http.Request) {
 
 	if folderIDStr == "" {
 		// Get root files (files with no parent folder)
-		files, err = h.queries.GetFilesByFolder(r.Context(), pgtype.UUID{Valid: false})
+		files, err = h.queries.GetRootFiles(r.Context(), session.UserID)
 	} else {
-		folderID, err := uuid.Parse(folderIDStr)
-		if err != nil {
+		folderID, parseErr := uuid.Parse(folderIDStr)
+		if parseErr != nil {
 			respondWithError(w, http.StatusBadRequest, "invalid folder_id")
 			return
 		}
-		files, err = h.queries.GetFilesByFolder(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
+		files, err = h.queries.GetFilesByFolder(r.Context(), database.GetFilesByFolderParams{
+			OwnerID:        session.UserID,
+			ParentFolderID: pgtype.UUID{Bytes: folderID, Valid: true},
+		})
 	}
 
 	if err != nil {
@@ -397,6 +413,10 @@ type RenameFileRequest struct {
 	NewName string `json:"new_name"`
 }
 
+type MoveFileRequest struct {
+	FolderID string `json:"folder_id"` // Can be empty for root
+}
+
 // RenameFile renames a file
 func (h *FilesHandler) RenameFile(w http.ResponseWriter, r *http.Request) {
 	session, ok := middleware.GetUserFromContext(r.Context())
@@ -455,5 +475,120 @@ func (h *FilesHandler) RenameFile(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "file renamed successfully",
 	})
+}
 
+// MoveFile moves a file to a different folder
+func (h *FilesHandler) MoveFile(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	fileIDStr := chi.URLParam(r, "id")
+	fileID, err := uuid.Parse(fileIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
+		return
+	}
+
+	var req MoveFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Get file to check ownership
+	dbFile, err := h.queries.GetFileByID(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "file not found")
+		return
+	}
+
+	if dbFile.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Parse folder ID
+	var folderID pgtype.UUID
+	if req.FolderID != "" {
+		parsedUUID, err := uuid.Parse(req.FolderID)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid folder_id")
+			return
+		}
+		folderID = pgtype.UUID{Bytes: parsedUUID, Valid: true}
+
+		// Verify folder exists and user owns it
+		folder, err := h.queries.GetFolderByID(r.Context(), folderID)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "folder not found")
+			return
+		}
+		if folder.OwnerID != session.UserID {
+			respondWithError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+	} else {
+		folderID = pgtype.UUID{Valid: false} // Move to root
+	}
+
+	// Move file in database
+	if err := h.queries.MoveFile(r.Context(), database.MoveFileParams{
+		ID:             pgtype.UUID{Bytes: fileID, Valid: true},
+		ParentFolderID: folderID,
+	}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to move file")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "file moved successfully",
+	})
+}
+
+// GetThumbnail serves a file thumbnail
+func (h *FilesHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
+	_, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	fileIDStr := chi.URLParam(r, "id")
+	fileID, err := uuid.Parse(fileIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
+		return
+	}
+
+	// Get file from database
+	dbFile, err := h.queries.GetFileByID(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "file not found")
+		return
+	}
+
+	// Check if thumbnail exists
+	if !dbFile.ThumbnailPath.Valid || dbFile.ThumbnailPath.String == "" {
+		respondWithError(w, http.StatusNotFound, "thumbnail not available")
+		return
+	}
+
+	// Open thumbnail from storage
+	thumbnailPath := dbFile.ThumbnailPath.String
+	file, err := h.storageService.GetFile(thumbnailPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to open thumbnail")
+		return
+	}
+	defer file.Close()
+
+	// Set headers for thumbnail
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=31536000")
+
+	// Stream thumbnail
+	io.Copy(w, file)
 }

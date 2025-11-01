@@ -130,6 +130,46 @@ func (q *Queries) GetRootFolder(ctx context.Context, ownerID pgtype.UUID) (Folde
 	return i, err
 }
 
+const getRootFolders = `-- name: GetRootFolders :many
+SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
+WHERE owner_id = $1
+  AND parent_folder_id IS NULL
+  AND is_root = FALSE
+  AND status = 'active'
+ORDER BY name ASC
+`
+
+func (q *Queries) GetRootFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error) {
+	rows, err := q.db.Query(ctx, getRootFolders, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Folder{}
+	for rows.Next() {
+		var i Folder
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.IsRoot,
+			&i.Status,
+			&i.IsStarred,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSubfolders = `-- name: GetSubfolders :many
 SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
 WHERE parent_folder_id = $1 AND status = 'active'
@@ -165,6 +205,22 @@ func (q *Queries) GetSubfolders(ctx context.Context, parentFolderID pgtype.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveFolder = `-- name: MoveFolder :exec
+UPDATE folders
+SET parent_folder_id = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type MoveFolderParams struct {
+	ID             pgtype.UUID `json:"id"`
+	ParentFolderID pgtype.UUID `json:"parent_folder_id"`
+}
+
+func (q *Queries) MoveFolder(ctx context.Context, arg MoveFolderParams) error {
+	_, err := q.db.Exec(ctx, moveFolder, arg.ID, arg.ParentFolderID)
+	return err
 }
 
 const renameFolder = `-- name: RenameFolder :exec

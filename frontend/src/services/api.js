@@ -133,6 +133,13 @@ export const filesAPI = {
     const response = await api.get(`/files/search?q=${encodeURIComponent(query)}`);
     return response.data;
   },
+
+  moveFile: async (fileId, folderId) => {
+    const response = await api.put(`/files/${fileId}/move`, {
+      folder_id: folderId || '',
+    });
+    return response.data;
+  },
 };
 
 // Folders API
@@ -153,6 +160,45 @@ export const foldersAPI = {
 
   getRootFolder: async () => {
     const response = await api.get('/folders/root');
+    return response.data;
+  },
+
+  getFolderById: async (folderId) => {
+    const response = await api.get(`/folders/${folderId}`);
+    return response.data;
+  },
+
+  moveFolder: async (folderId, parentFolderId) => {
+    const response = await api.put(`/folders/${folderId}/move`, {
+      parent_folder_id: parentFolderId || '',
+    });
+    return response.data;
+  },
+};
+
+// Sharing API
+export const sharingAPI = {
+  createShareLink: async (itemType, itemId, permission = 'viewer') => {
+    const response = await api.post('/sharing/link', {
+      item_type: itemType,
+      item_id: itemId,
+      permission,
+    });
+    return response.data;
+  },
+
+  getShareLinks: async (itemType, itemId) => {
+    const response = await api.get(`/sharing/links?item_type=${itemType}&item_id=${itemId}`);
+    return response.data;
+  },
+
+  deactivateShareLink: async (linkId) => {
+    const response = await api.delete(`/sharing/link/${linkId}`);
+    return response.data;
+  },
+
+  getItemPermissions: async (itemType, itemId) => {
+    const response = await api.get(`/sharing/permissions?item_type=${itemType}&item_id=${itemId}`);
     return response.data;
   },
 };

@@ -2,10 +2,15 @@ package services
 
 import (
 	"fmt"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 )
 
@@ -123,4 +128,42 @@ func (s *StorageService) MoveFile(oldPath, newPath string) error {
 	}
 
 	return nil
+}
+
+// GenerateThumbnail generates a thumbnail for an image file
+// Returns: (thumbnailPath, error)
+func (s *StorageService) GenerateThumbnail(storagePath string, mimeType string, fileID uuid.UUID) (string, error) {
+	// Only generate thumbnails for images
+	if !strings.HasPrefix(mimeType, "image/") {
+		return "", fmt.Errorf("file is not an image")
+	}
+
+	// Full path to original file
+	fullPath := filepath.Join(s.basePath, storagePath)
+
+	// Open and decode the image
+	src, err := imaging.Open(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open image: %w", err)
+	}
+
+	// Create thumbnail (200x200 max, maintaining aspect ratio)
+	thumbnail := imaging.Fit(src, 200, 200, imaging.Lanczos)
+
+	// Create thumbnail directory structure: thumbnails/file_{uuid}.jpg
+	thumbnailFilename := fmt.Sprintf("%s.jpg", fileID.String())
+	thumbnailFullPath := filepath.Join(s.thumbnailPath, thumbnailFilename)
+
+	// Ensure thumbnail directory exists
+	if err := os.MkdirAll(s.thumbnailPath, 0755); err != nil {
+		return "", fmt.Errorf("failed to create thumbnail directory: %w", err)
+	}
+
+	// Save thumbnail as JPEG (smaller file size)
+	if err := imaging.Save(thumbnail, thumbnailFullPath); err != nil {
+		return "", fmt.Errorf("failed to save thumbnail: %w", err)
+	}
+
+	// Return relative path for database
+	return thumbnailFilename, nil
 }

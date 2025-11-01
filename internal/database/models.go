@@ -105,6 +105,48 @@ func (ns NullFileStatus) Value() (driver.Value, error) {
 	return string(ns.FileStatus), nil
 }
 
+type ItemType string
+
+const (
+	ItemTypeFile   ItemType = "file"
+	ItemTypeFolder ItemType = "folder"
+)
+
+func (e *ItemType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ItemType(s)
+	case string:
+		*e = ItemType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ItemType: %T", src)
+	}
+	return nil
+}
+
+type NullItemType struct {
+	ItemType ItemType `json:"item_type"`
+	Valid    bool     `json:"valid"` // Valid is true if ItemType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullItemType) Scan(value interface{}) error {
+	if value == nil {
+		ns.ItemType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ItemType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullItemType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ItemType), nil
+}
+
 type PermissionRole string
 
 const (
@@ -179,15 +221,6 @@ type File struct {
 	LastAccessedAt   pgtype.Timestamp `json:"last_accessed_at"`
 }
 
-type FilePermission struct {
-	ID        pgtype.UUID      `json:"id"`
-	FileID    pgtype.UUID      `json:"file_id"`
-	UserID    pgtype.UUID      `json:"user_id"`
-	Role      PermissionRole   `json:"role"`
-	GrantedBy pgtype.UUID      `json:"granted_by"`
-	CreatedAt pgtype.Timestamp `json:"created_at"`
-}
-
 type FileVersion struct {
 	ID            pgtype.UUID      `json:"id"`
 	FileID        pgtype.UUID      `json:"file_id"`
@@ -211,6 +244,16 @@ type Folder struct {
 	TrashedAt      pgtype.Timestamp `json:"trashed_at"`
 }
 
+type Permission struct {
+	ID        pgtype.UUID      `json:"id"`
+	ItemType  ItemType         `json:"item_type"`
+	ItemID    pgtype.UUID      `json:"item_id"`
+	UserID    pgtype.UUID      `json:"user_id"`
+	Role      PermissionRole   `json:"role"`
+	GrantedBy pgtype.UUID      `json:"granted_by"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
 type Session struct {
 	ID        pgtype.UUID      `json:"id"`
 	UserID    pgtype.UUID      `json:"user_id"`
@@ -219,9 +262,10 @@ type Session struct {
 	CreatedAt pgtype.Timestamp `json:"created_at"`
 }
 
-type ShareLink struct {
+type Share struct {
 	ID         pgtype.UUID        `json:"id"`
-	FileID     pgtype.UUID        `json:"file_id"`
+	ItemType   ItemType           `json:"item_type"`
+	ItemID     pgtype.UUID        `json:"item_id"`
 	Token      string             `json:"token"`
 	CreatedBy  pgtype.UUID        `json:"created_by"`
 	Permission NullPermissionRole `json:"permission"`
