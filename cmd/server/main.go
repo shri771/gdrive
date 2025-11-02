@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -82,6 +83,17 @@ func main() {
 	// Initialize services
 	authService := services.NewAuthService(jwtSecret, sessionDurationHours)
 	storageService := services.NewStorageService(storagePath, thumbnailPath)
+	cleanupService := services.NewCleanupService(queries, dbPool)
+
+	// Get trash cleanup configuration
+	trashDays, err := strconv.Atoi(os.Getenv("TRASH_CLEANUP_DAYS"))
+	if err != nil {
+		trashDays = 30 // Default 30 days
+	}
+
+	// Initialize WebSocket hub
+	wsHub := services.NewHub(queries)
+	go wsHub.Run()
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(queries, authService)
@@ -90,8 +102,9 @@ func main() {
 	sharingHandler := handlers.NewSharingHandler(queries, authService)
 	versionsHandler := handlers.NewVersionsHandler(queries)
 	activityHandler := handlers.NewActivityHandler(queries)
-	commentHandler := handlers.NewCommentHandler(queries)
+	commentHandler := handlers.NewCommentHandler(queries, wsHub)
 	storageHandler := handlers.NewStorageHandler(queries)
+	wsHandler := handlers.NewWebSocketHandler(wsHub)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -105,6 +118,9 @@ func main() {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
+
+	// WebSocket routes (token-based auth via query param)
+	r.Get("/api/ws/comments/{fileId}", wsHandler.HandleCommentsWS)
 
 	// Public routes (no authentication required)
 	r.Route("/api/auth", func(r chi.Router) {
@@ -183,6 +199,8 @@ func main() {
 		r.Route("/activity", func(r chi.Router) {
 			r.Get("/", activityHandler.GetUserActivity)
 			r.Get("/file", activityHandler.GetFileActivity)
+			r.Get("/timeline", activityHandler.GetActivityTimeline)
+			r.Get("/dashboard", activityHandler.GetDashboardActivity)
 		})
 
 		// Comment routes
@@ -196,6 +214,11 @@ func main() {
 		// Storage analytics routes
 		r.Get("/storage/analytics", storageHandler.GetStorageAnalytics)
 	})
+
+	// Start cleanup scheduler (runs daily to permanently delete files in trash older than specified days)
+	ctx := context.Background()
+	cleanupService.StartCleanupScheduler(ctx, int32(trashDays), 24*time.Hour)
+	log.Printf("🧹 Trash cleanup scheduler started (deletes files older than %d days)", trashDays)
 
 	// Start server
 	addr := fmt.Sprintf(":%s", port)

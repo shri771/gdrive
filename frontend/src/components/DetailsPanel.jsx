@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Calendar, HardDrive, FileText, Folder, Star, Clock } from 'lucide-react';
 
 const DetailsPanel = ({ item, type, isOpen, onClose }) => {
@@ -37,6 +37,41 @@ const DetailsPanel = ({ item, type, isOpen, onClose }) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const [imageUrl, setImageUrl] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+
+  useEffect(() => {
+    if (type === 'file' && item.mime_type?.startsWith('image/')) {
+      loadImagePreview();
+    }
+    return () => {
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl);
+      }
+    };
+  }, [item?.id]);
+
+  const loadImagePreview = async () => {
+    if (!item?.id) return;
+    setImageLoading(true);
+    try {
+      const response = await fetch(`http://localhost:1030/api/files/${item.id}/download`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setImageUrl(url);
+      }
+    } catch (error) {
+      console.error('Failed to load image:', error);
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
   const getFileIcon = () => {
     if (type === 'folder') {
       return <Folder className="w-16 h-16 text-gray-400" />;
@@ -44,19 +79,31 @@ const DetailsPanel = ({ item, type, isOpen, onClose }) => {
 
     const mimeType = item.mime_type || '';
     if (mimeType.startsWith('image/')) {
-      return (
-        <div className="w-16 h-16 rounded overflow-hidden bg-gray-100">
-          {item.thumbnail_path ? (
+      if (imageLoading) {
+        return <div className="w-full h-64 bg-gray-100 animate-pulse flex items-center justify-center">Loading...</div>;
+      }
+      if (imageUrl) {
+        return (
+          <div className="w-full">
             <img
-              src={`http://localhost:1030/api/files/${item.id}/thumbnail`}
+              src={imageUrl}
               alt={item.name}
-              className="w-full h-full object-cover"
+              className="w-full max-h-96 object-contain rounded"
             />
-          ) : (
-            <FileText className="w-16 h-16 text-blue-500 p-2" />
-          )}
-        </div>
-      );
+          </div>
+        );
+      }
+      // Fallback to thumbnail if available
+      if (item.thumbnail_path) {
+        return (
+          <img
+            src={`http://localhost:1030/api/files/${item.id}/thumbnail`}
+            alt={item.name}
+            className="w-full max-h-96 object-contain rounded"
+          />
+        );
+      }
+      return <FileText className="w-16 h-16 text-blue-500 p-2" />;
     }
 
     return <FileText className="w-16 h-16 text-blue-500" />;
@@ -64,26 +111,58 @@ const DetailsPanel = ({ item, type, isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-y-0 right-0 w-80 bg-white border-l border-gray-200 shadow-lg z-40 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-base font-medium text-gray-900">Details</h2>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      {/* Header with filename and tabs */}
+      <div className="border-b border-gray-200">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {type === 'file' && item.mime_type?.startsWith('image/') && (
+              <div className="w-6 h-6 flex-shrink-0">
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" className="w-full h-full object-cover rounded" />
+                ) : item.thumbnail_path ? (
+                  <img src={`http://localhost:1030/api/files/${item.id}/thumbnail`} alt="" className="w-full h-full object-cover rounded" />
+                ) : (
+                  <FileText className="w-6 h-6 text-red-500" />
+                )}
+              </div>
+            )}
+            <h3 className="text-sm font-medium text-gray-900 truncate flex-1">
+              {item.name || item.original_name}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 flex-shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 px-4">
+          <button className="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600">
+            Details
+          </button>
+          <button className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+            Activity
+          </button>
+        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Preview/Icon */}
-        <div className="p-6 flex flex-col items-center border-b border-gray-200">
-          {getFileIcon()}
-          <h3 className="mt-4 text-sm font-medium text-gray-900 text-center break-all px-2">
-            {item.name || item.original_name}
-          </h3>
-        </div>
+        {/* Preview/Icon - Full width for images */}
+        {type === 'file' && item.mime_type?.startsWith('image/') ? (
+          <div className="w-full bg-gray-50 p-4">
+            {getFileIcon()}
+          </div>
+        ) : (
+          <div className="p-6 flex flex-col items-center border-b border-gray-200">
+            {getFileIcon()}
+            <h3 className="mt-4 text-sm font-medium text-gray-900 text-center break-all px-2">
+              {item.name || item.original_name}
+            </h3>
+          </div>
+        )}
 
         {/* Details Section */}
         <div className="p-4 space-y-4">

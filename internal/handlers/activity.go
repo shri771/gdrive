@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -90,6 +91,88 @@ func (h *ActivityHandler) GetFileActivity(w http.ResponseWriter, r *http.Request
 	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to get file activity")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(activities)
+}
+
+// GetActivityTimeline returns activity grouped by date
+func (h *ActivityHandler) GetActivityTimeline(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// Get date range from query params (default to last 30 days)
+	startDateStr := r.URL.Query().Get("start_date")
+	endDateStr := r.URL.Query().Get("end_date")
+
+	var startDate, endDate time.Time
+	var err error
+
+	if startDateStr == "" {
+		startDate = time.Now().AddDate(0, 0, -30) // 30 days ago
+	} else {
+		startDate, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid start_date format (use YYYY-MM-DD)")
+			return
+		}
+	}
+
+	if endDateStr == "" {
+		endDate = time.Now()
+	} else {
+		endDate, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid end_date format (use YYYY-MM-DD)")
+			return
+		}
+	}
+
+	// Get activity timeline
+	activities, err := h.queries.GetActivityTimeline(r.Context(), database.GetActivityTimelineParams{
+		UserID:  session.UserID,
+		Column2: pgtype.Date{Time: startDate, Valid: true},
+		Column3: pgtype.Date{Time: endDate, Valid: true},
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to get activity timeline")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(activities)
+}
+
+// GetDashboardActivity returns recent activities for dashboard widget
+func (h *ActivityHandler) GetDashboardActivity(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// Get limit from query params, default to 10
+	limitStr := r.URL.Query().Get("limit")
+	limit := int32(10)
+	if limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err == nil && parsedLimit > 0 && parsedLimit <= 50 {
+			limit = int32(parsedLimit)
+		}
+	}
+
+	// Get dashboard activity
+	activities, err := h.queries.GetDashboardActivity(r.Context(), database.GetDashboardActivityParams{
+		UserID: session.UserID,
+		Limit:  limit,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to get dashboard activity")
 		return
 	}
 

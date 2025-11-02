@@ -25,19 +25,24 @@ type Querier interface {
 	DeleteFileVersions(ctx context.Context, fileID pgtype.UUID) error
 	DeleteSession(ctx context.Context, token string) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
+	GetActivityTimeline(ctx context.Context, arg GetActivityTimelineParams) ([]GetActivityTimelineRow, error)
 	GetComment(ctx context.Context, id pgtype.UUID) (Comment, error)
 	GetCommentsByUser(ctx context.Context, arg GetCommentsByUserParams) ([]GetCommentsByUserRow, error)
+	GetDashboardActivity(ctx context.Context, arg GetDashboardActivityParams) ([]GetDashboardActivityRow, error)
 	GetFileActivity(ctx context.Context, arg GetFileActivityParams) ([]GetFileActivityRow, error)
 	GetFileByID(ctx context.Context, id pgtype.UUID) (File, error)
 	GetFileByIDAnyStatus(ctx context.Context, id pgtype.UUID) (File, error)
+	GetFileByNameAndFolder(ctx context.Context, arg GetFileByNameAndFolderParams) (File, error)
 	GetFileComments(ctx context.Context, fileID pgtype.UUID) ([]GetFileCommentsRow, error)
 	GetFileVersion(ctx context.Context, id pgtype.UUID) (GetFileVersionRow, error)
 	GetFileVersions(ctx context.Context, fileID pgtype.UUID) ([]GetFileVersionsRow, error)
 	GetFilesByFolder(ctx context.Context, arg GetFilesByFolderParams) ([]File, error)
 	GetFilesByOwner(ctx context.Context, arg GetFilesByOwnerParams) ([]File, error)
+	GetFilesInTrashOlderThan(ctx context.Context, dollar_1 interface{}) ([]File, error)
 	GetFolderByID(ctx context.Context, id pgtype.UUID) (Folder, error)
 	GetFolderByIDAnyStatus(ctx context.Context, id pgtype.UUID) (Folder, error)
 	GetFoldersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error)
+	GetFoldersInTrashOlderThan(ctx context.Context, dollar_1 interface{}) ([]Folder, error)
 	GetItemPermissions(ctx context.Context, arg GetItemPermissionsParams) ([]GetItemPermissionsRow, error)
 	GetLatestVersionNumber(ctx context.Context, fileID pgtype.UUID) (interface{}, error)
 	GetRecentFiles(ctx context.Context, arg GetRecentFilesParams) ([]File, error)
@@ -80,6 +85,7 @@ type Querier interface {
 	TrashFile(ctx context.Context, id pgtype.UUID) error
 	TrashFolder(ctx context.Context, id pgtype.UUID) error
 	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
+	UpdateFileStorageAndVersion(ctx context.Context, arg UpdateFileStorageAndVersionParams) error
 	UpdateLastAccessed(ctx context.Context, id pgtype.UUID) error
 	UpdateUserStorage(ctx context.Context, arg UpdateUserStorageParams) error
 }

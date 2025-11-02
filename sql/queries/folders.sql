@@ -71,3 +71,9 @@ ORDER BY updated_at DESC;
 UPDATE folders
 SET is_starred = NOT is_starred, updated_at = NOW()
 WHERE id = $1;
+
+-- name: GetFoldersInTrashOlderThan :many
+SELECT * FROM folders
+WHERE status = 'trashed'
+  AND trashed_at < NOW() - INTERVAL '1 day' * $1
+ORDER BY trashed_at ASC;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HardDrive, FileText, Image, Film, Music, File, Archive, X } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { storageAPI } from '../services/api';
 import './StorageAnalytics.css';
 
@@ -163,7 +164,41 @@ const StorageAnalytics = ({ onClose }) => {
             <div className="file-type-breakdown">
               <h3>Storage by File Type</h3>
 
-              {/* Visual Chart */}
+              {/* Pie Chart */}
+              <div className="pie-chart-container">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={analytics.by_file_type.map(type => ({
+                        name: type.file_type,
+                        value: type.total_size,
+                        files: type.file_count,
+                        percentage: type.percentage
+                      }))}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ percentage }) => `${percentage.toFixed(1)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {analytics.by_file_type.map((type, index) => (
+                        <Cell key={`cell-${index}`} fill={getFileTypeColor(type.file_type)} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value, name, props) => [
+                        `${formatBytes(value)} (${props.payload.percentage.toFixed(1)}%)`,
+                        props.payload.name
+                      ]}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Visual Chart (Backup bar chart) */}
               <div className="file-type-chart">
                 {analytics.by_file_type.map((type, index) => (
                   <div

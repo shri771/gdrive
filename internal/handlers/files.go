@@ -64,8 +64,49 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		folderID = pgtype.UUID{Bytes: parsedUUID, Valid: true}
 	}
 
-	// Generate file ID
-	fileID := uuid.New()
+	// Determine if preview is available (simple check)
+	mimeType := header.Header.Get("Content-Type")
+	previewAvailable := false
+	if mimeType == "application/pdf" || (len(mimeType) >= 6 && mimeType[:6] == "image/") {
+		previewAvailable = true
+	}
+
+	// Check if file with same name exists in the same folder
+	existingFile, err := h.queries.GetFileByNameAndFolder(r.Context(), database.GetFileByNameAndFolderParams{
+		OwnerID:        session.UserID,
+		Name:           header.Filename,
+		ParentFolderID: folderID,
+	})
+
+	var dbFile database.File
+	var versionNumber int32 = 1
+	var fileID uuid.UUID
+	fileExists := err == nil
+
+	if fileExists {
+		// File exists - create new version
+		dbFile = existingFile
+		fileID = uuid.UUID(dbFile.ID.Bytes)
+
+		// Get latest version number
+		latestVersionRaw, err := h.queries.GetLatestVersionNumber(r.Context(), dbFile.ID)
+		if err != nil {
+			// If no versions exist, start at 1
+			versionNumber = 1
+		} else {
+			// Type assert the result (it's an int64 from PostgreSQL)
+			if latestVersion, ok := latestVersionRaw.(int64); ok {
+				versionNumber = int32(latestVersion) + 1
+			} else if latestVersion, ok := latestVersionRaw.(int32); ok {
+				versionNumber = latestVersion + 1
+			} else {
+				versionNumber = 1
+			}
+		}
+	} else {
+		// New file - create new record
+		fileID = uuid.New()
+	}
 
 	// Save file to storage
 	storagePath, err := h.storageService.SaveFile(
@@ -73,18 +114,11 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		fileID,
 		file,
 		header.Filename,
-		1, // version 1
+		int(versionNumber),
 	)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save file: %v", err))
 		return
-	}
-
-	// Determine if preview is available (simple check)
-	previewAvailable := false
-	mimeType := header.Header.Get("Content-Type")
-	if mimeType == "application/pdf" || (len(mimeType) >= 6 && mimeType[:6] == "image/") {
-		previewAvailable = true
 	}
 
 	// Generate thumbnail if it's an image
@@ -99,35 +133,68 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create file record in database
-	dbFile, err := h.queries.CreateFile(r.Context(), database.CreateFileParams{
-		Name:             header.Filename,
-		OriginalName:     header.Filename,
-		MimeType:         mimeType,
-		Size:             header.Size,
-		StoragePath:      storagePath,
-		OwnerID:          session.UserID,
-		ParentFolderID:   folderID,
-		PreviewAvailable: pgtype.Bool{Bool: previewAvailable, Valid: true},
-		ThumbnailPath:    thumbnailPath,
-	})
-	if err != nil {
-		// Cleanup: delete the uploaded file
-		h.storageService.DeleteFile(storagePath)
-		respondWithError(w, http.StatusInternalServerError, "failed to create file record")
-		return
+	// Create or update file record in database
+	if fileExists {
+		// Update existing file with new version
+		err = h.queries.UpdateFileStorageAndVersion(r.Context(), database.UpdateFileStorageAndVersionParams{
+			ID:               dbFile.ID,
+			StoragePath:      storagePath,
+			Size:             header.Size,
+			MimeType:         mimeType,
+			Version:           pgtype.Int4{Int32: versionNumber, Valid: true},
+			CurrentVersionID: pgtype.UUID{Valid: false}, // Will be set after creating version
+		})
+		if err != nil {
+			h.storageService.DeleteFile(storagePath)
+			respondWithError(w, http.StatusInternalServerError, "failed to update file record")
+			return
+		}
+	} else {
+		// Create new file record
+		dbFile, err = h.queries.CreateFile(r.Context(), database.CreateFileParams{
+			Name:             header.Filename,
+			OriginalName:     header.Filename,
+			MimeType:         mimeType,
+			Size:             header.Size,
+			StoragePath:      storagePath,
+			OwnerID:          session.UserID,
+			ParentFolderID:   folderID,
+			PreviewAvailable: pgtype.Bool{Bool: previewAvailable, Valid: true},
+			ThumbnailPath:    thumbnailPath,
+		})
+		if err != nil {
+			// Cleanup: delete the uploaded file
+			h.storageService.DeleteFile(storagePath)
+			respondWithError(w, http.StatusInternalServerError, "failed to create file record")
+			return
+		}
 	}
 
-	// Create initial version record
-	_, err = h.queries.CreateFileVersion(r.Context(), database.CreateFileVersionParams{
-		FileID:       dbFile.ID,
-		VersionNumber: 1,
+	// Create version record
+	versionRecord, err := h.queries.CreateFileVersion(r.Context(), database.CreateFileVersionParams{
+		FileID:        dbFile.ID,
+		VersionNumber: versionNumber,
 		StoragePath:   storagePath,
 		Size:          header.Size,
 		UploadedBy:    session.UserID,
 	})
 	if err != nil {
 		fmt.Printf("failed to create version record: %v\n", err)
+	} else {
+		// Update current_version_id if it's a new version
+		if fileExists {
+			err = h.queries.UpdateFileStorageAndVersion(r.Context(), database.UpdateFileStorageAndVersionParams{
+				ID:               dbFile.ID,
+				StoragePath:      storagePath,
+				Size:             header.Size,
+				MimeType:         mimeType,
+				Version:           pgtype.Int4{Int32: versionNumber, Valid: true},
+				CurrentVersionID: versionRecord.ID,
+			})
+			if err != nil {
+				fmt.Printf("failed to update current_version_id: %v\n", err)
+			}
+		}
 	}
 
 	// Update user storage

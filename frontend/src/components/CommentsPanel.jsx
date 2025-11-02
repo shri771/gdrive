@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Send, Edit2, Trash2, X, Check } from 'lucide-react';
 import { commentsAPI } from '../services/api';
+import wsService from '../services/websocket';
 import './CommentsPanel.css';
 
 const CommentsPanel = ({ fileId, currentUser }) => {
@@ -10,10 +11,71 @@ const CommentsPanel = ({ fileId, currentUser }) => {
   const [editContent, setEditContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [useWebSocket, setUseWebSocket] = useState(false);
+  const pollingIntervalRef = useRef(null);
 
   useEffect(() => {
     loadComments();
+    
+    // Try WebSocket connection
+    const token = localStorage.getItem('token');
+    if (token && fileId) {
+      try {
+        wsService.connect(fileId, token);
+        setUseWebSocket(true);
+
+        // Listen for WebSocket messages
+        const handleMessage = (data) => {
+          if (data.type === 'comment_created') {
+            setComments(prev => [...prev, data.comment]);
+          } else if (data.type === 'comment_updated') {
+            setComments(prev => prev.map(c => c.id === data.comment.id ? data.comment : c));
+          } else if (data.type === 'comment_deleted') {
+            setComments(prev => prev.filter(c => c.id !== data.comment_id));
+          }
+        };
+
+        const handleError = () => {
+          console.log('WebSocket error, falling back to polling');
+          setUseWebSocket(false);
+          startPolling();
+        };
+
+        wsService.on('message', handleMessage);
+        wsService.on('error', handleError);
+        wsService.on('reconnect-failed', handleError);
+
+        return () => {
+          wsService.off('message', handleMessage);
+          wsService.off('error', handleError);
+          wsService.off('reconnect-failed', handleError);
+        };
+      } catch (error) {
+        console.log('WebSocket not available, using polling');
+        setUseWebSocket(false);
+        startPolling();
+      }
+    } else {
+      startPolling();
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
   }, [fileId]);
+
+  // Fallback polling when WebSocket is not available
+  const startPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    // Poll every 5 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      loadComments();
+    }, 5000);
+  };
 
   const loadComments = async () => {
     try {
@@ -35,8 +97,22 @@ const CommentsPanel = ({ fileId, currentUser }) => {
 
     try {
       const comment = await commentsAPI.createComment(fileId, newComment.trim());
-      setComments([...comments, comment]);
+      
+      // If WebSocket is connected, it will handle the update
+      // Otherwise, manually add to list
+      if (!useWebSocket) {
+        setComments([...comments, comment]);
+      }
+      
       setNewComment('');
+      
+      // Broadcast via WebSocket if connected
+      if (wsService.isConnected()) {
+        wsService.send({
+          type: 'comment_created',
+          comment: comment
+        });
+      }
     } catch (err) {
       console.error('Failed to add comment:', err);
       setError('Failed to add comment');

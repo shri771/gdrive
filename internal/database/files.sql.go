@@ -128,6 +128,47 @@ func (q *Queries) GetFileByIDAnyStatus(ctx context.Context, id pgtype.UUID) (Fil
 	return i, err
 }
 
+const getFileByNameAndFolder = `-- name: GetFileByNameAndFolder :one
+SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files
+WHERE owner_id = $1
+  AND name = $2
+  AND (parent_folder_id = $3 OR (parent_folder_id IS NULL AND $3 IS NULL))
+  AND status = 'active'
+LIMIT 1
+`
+
+type GetFileByNameAndFolderParams struct {
+	OwnerID        pgtype.UUID `json:"owner_id"`
+	Name           string      `json:"name"`
+	ParentFolderID pgtype.UUID `json:"parent_folder_id"`
+}
+
+func (q *Queries) GetFileByNameAndFolder(ctx context.Context, arg GetFileByNameAndFolderParams) (File, error) {
+	row := q.db.QueryRow(ctx, getFileByNameAndFolder, arg.OwnerID, arg.Name, arg.ParentFolderID)
+	var i File
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OriginalName,
+		&i.MimeType,
+		&i.Size,
+		&i.StoragePath,
+		&i.OwnerID,
+		&i.ParentFolderID,
+		&i.Status,
+		&i.IsStarred,
+		&i.ThumbnailPath,
+		&i.PreviewAvailable,
+		&i.Version,
+		&i.CurrentVersionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TrashedAt,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
 const getFilesByFolder = `-- name: GetFilesByFolder :many
 SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files
 WHERE owner_id = $1
@@ -195,6 +236,52 @@ type GetFilesByOwnerParams struct {
 
 func (q *Queries) GetFilesByOwner(ctx context.Context, arg GetFilesByOwnerParams) ([]File, error) {
 	rows, err := q.db.Query(ctx, getFilesByOwner, arg.OwnerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []File{}
+	for rows.Next() {
+		var i File
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OriginalName,
+			&i.MimeType,
+			&i.Size,
+			&i.StoragePath,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.Status,
+			&i.IsStarred,
+			&i.ThumbnailPath,
+			&i.PreviewAvailable,
+			&i.Version,
+			&i.CurrentVersionID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+			&i.LastAccessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFilesInTrashOlderThan = `-- name: GetFilesInTrashOlderThan :many
+SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files
+WHERE status = 'trashed'
+  AND trashed_at < NOW() - INTERVAL '1 day' * $1
+ORDER BY trashed_at ASC
+`
+
+func (q *Queries) GetFilesInTrashOlderThan(ctx context.Context, dollar_1 interface{}) ([]File, error) {
+	rows, err := q.db.Query(ctx, getFilesInTrashOlderThan, dollar_1)
 	if err != nil {
 		return nil, err
 	}
@@ -599,6 +686,38 @@ WHERE id = $1
 
 func (q *Queries) TrashFile(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, trashFile, id)
+	return err
+}
+
+const updateFileStorageAndVersion = `-- name: UpdateFileStorageAndVersion :exec
+UPDATE files
+SET storage_path = $2,
+    size = $3,
+    mime_type = $4,
+    version = $5,
+    current_version_id = $6,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateFileStorageAndVersionParams struct {
+	ID               pgtype.UUID `json:"id"`
+	StoragePath      string      `json:"storage_path"`
+	Size             int64       `json:"size"`
+	MimeType         string      `json:"mime_type"`
+	Version          pgtype.Int4 `json:"version"`
+	CurrentVersionID pgtype.UUID `json:"current_version_id"`
+}
+
+func (q *Queries) UpdateFileStorageAndVersion(ctx context.Context, arg UpdateFileStorageAndVersionParams) error {
+	_, err := q.db.Exec(ctx, updateFileStorageAndVersion,
+		arg.ID,
+		arg.StoragePath,
+		arg.Size,
+		arg.MimeType,
+		arg.Version,
+		arg.CurrentVersionID,
+	)
 	return err
 }
 

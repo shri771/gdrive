@@ -4,6 +4,7 @@ import {
   Star, StarOff, Trash2, Info, ExternalLink, ZoomIn, ZoomOut,
   RotateCw, Maximize2, Printer, MessageSquare
 } from 'lucide-react';
+import { useSpring, animated } from 'react-spring';
 import { filesAPI } from '../services/api';
 import CommentsPanel from './CommentsPanel';
 import './FileViewer.css';
@@ -87,11 +88,49 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
 
   const getFileType = () => {
     const mimeType = file.mime_type || '';
+    const fileName = file.name?.toLowerCase() || '';
+    
+    // Images
     if (mimeType.startsWith('image/')) return 'image';
+    
+    // Videos
     if (mimeType.startsWith('video/')) return 'video';
+    
+    // Audio
     if (mimeType.startsWith('audio/')) return 'audio';
-    if (mimeType === 'application/pdf') return 'pdf';
-    if (mimeType.includes('text/')) return 'text';
+    
+    // PDF
+    if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
+    
+    // Text files
+    if (mimeType.includes('text/') || 
+        fileName.endsWith('.txt') || 
+        fileName.endsWith('.md') || 
+        fileName.endsWith('.csv') ||
+        fileName.endsWith('.json') ||
+        fileName.endsWith('.xml') ||
+        fileName.endsWith('.html') ||
+        fileName.endsWith('.css') ||
+        fileName.endsWith('.js') ||
+        fileName.endsWith('.ts') ||
+        fileName.endsWith('.jsx') ||
+        fileName.endsWith('.tsx') ||
+        fileName.endsWith('.yaml') ||
+        fileName.endsWith('.yml')) return 'text';
+    
+    // Office Documents (try to preview via iframe/embed if possible)
+    if (mimeType.includes('application/vnd.ms-excel') ||
+        mimeType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml') ||
+        fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) return 'office';
+    
+    if (mimeType.includes('application/vnd.ms-powerpoint') ||
+        mimeType.includes('application/vnd.openxmlformats-officedocument.presentationml') ||
+        fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) return 'office';
+    
+    if (mimeType.includes('application/msword') ||
+        mimeType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml') ||
+        fileName.endsWith('.doc') || fileName.endsWith('.docx')) return 'office';
+    
     return 'other';
   };
 
@@ -175,6 +214,22 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
           </div>
         );
 
+      case 'office':
+        return (
+          <div className="office-viewer">
+            <div className="office-placeholder">
+              <div className="office-icon">📄</div>
+              <h3>{file.name}</h3>
+              <p>Office documents cannot be previewed in the browser</p>
+              <p>Please download the file to view it</p>
+              <button onClick={handleDownload} className="download-btn-large">
+                <Download size={20} />
+                Download to view
+              </button>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="unsupported-viewer">
@@ -207,8 +262,22 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
 
   const fileType = getFileType();
 
+  // React Spring animation for modal
+  const overlayAnimation = useSpring({
+    opacity: 1,
+    from: { opacity: 0 },
+    config: { tension: 300, friction: 30 }
+  });
+
+  const modalAnimation = useSpring({
+    opacity: 1,
+    transform: 'scale(1)',
+    from: { opacity: 0, transform: 'scale(0.95)' },
+    config: { tension: 300, friction: 30 }
+  });
+
   return (
-    <div className="file-viewer-overlay">
+    <animated.div className="file-viewer-overlay" style={overlayAnimation}>
       {/* Header */}
       <div className="file-viewer-header">
         <div className="header-left">
@@ -310,9 +379,9 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
         )}
 
         {/* File Content */}
-        <div className="file-content">
+        <animated.div className="file-content" style={modalAnimation}>
           {renderFileContent()}
-        </div>
+        </animated.div>
 
         {/* Comments Panel */}
         {showComments && (
@@ -354,7 +423,7 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
           </div>
         )}
       </div>
-    </div>
+    </animated.div>
   );
 };
 

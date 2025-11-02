@@ -128,6 +128,44 @@ func (q *Queries) GetFoldersByOwner(ctx context.Context, ownerID pgtype.UUID) ([
 	return items, nil
 }
 
+const getFoldersInTrashOlderThan = `-- name: GetFoldersInTrashOlderThan :many
+SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
+WHERE status = 'trashed'
+  AND trashed_at < NOW() - INTERVAL '1 day' * $1
+ORDER BY trashed_at ASC
+`
+
+func (q *Queries) GetFoldersInTrashOlderThan(ctx context.Context, dollar_1 interface{}) ([]Folder, error) {
+	rows, err := q.db.Query(ctx, getFoldersInTrashOlderThan, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Folder{}
+	for rows.Next() {
+		var i Folder
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.IsRoot,
+			&i.Status,
+			&i.IsStarred,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRootFolder = `-- name: GetRootFolder :one
 SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
 WHERE owner_id = $1 AND is_root = TRUE

@@ -311,6 +311,247 @@
   color: #1a73e8;
 }
 
+/* Expandable nav items */
+.nav-item-expandable {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+.nav-item-expandable .nav-item {
+  flex: 1;
+  width: 100%;
+}
+
+.nav-expand-toggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #5f6368;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.nav-expand-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.nav-expand-toggle .expanded {
+  transform: rotate(90deg);
+}
+
+/* Storage section */
+.sidebar-storage {
+  margin-top: auto;
+  padding: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.storage-label {
+  font-size: 14px;
+  color: #5f6368;
+  margin-bottom: 8px;
+}
+
+.storage-progress {
+  margin-bottom: 12px;
+}
+
+.storage-progress-bar {
+  width: 100%;
+  height: 4px;
+  background-color: #e0e0e0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.storage-progress-fill {
+  height: 100%;
+  background-color: #1a73e8;
+  transition: width 0.3s ease;
+}
+
+.storage-text {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.storage-upgrade-btn {
+  width: 100%;
+  padding: 8px 16px;
+  background-color: #f1f3f4;
+  border: none;
+  border-radius: 20px;
+  color: #202124;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.storage-upgrade-btn:hover {
+  background-color: #e8eaed;
+}
+
+/* Home View */
+.home-view {
+  padding: 24px;
+}
+
+.home-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.home-section {
+  width: 100%;
+}
+
+.home-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+}
+
+.home-section-header h3 {
+  font-size: 16px;
+  font-weight: 400;
+  color: #202124;
+  margin: 0;
+}
+
+.home-view-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.home-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.home-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.home-item:hover {
+  background-color: #f1f3f4;
+  border-color: #dadce0;
+}
+
+.home-item:hover .home-item-menu {
+  opacity: 1;
+}
+
+.home-item-icon {
+  color: #5f6368;
+  flex-shrink: 0;
+}
+
+.home-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-item-name {
+  font-size: 14px;
+  color: #202124;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-item-meta {
+  font-size: 12px;
+  color: #5f6368;
+  margin-top: 2px;
+}
+
+.home-item-menu {
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #5f6368;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.home-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.home-file-item:hover {
+  background-color: #f1f3f4;
+}
+
+.home-file-item:hover .home-file-menu {
+  opacity: 1;
+}
+
+.home-file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-file-name {
+  font-size: 14px;
+  color: #202124;
+  font-weight: 400;
+}
+
+.home-file-details {
+  font-size: 12px;
+  color: #5f6368;
+  margin-top: 2px;
+}
+
+.home-file-menu {
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #5f6368;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.home-empty {
+  padding: 24px;
+  text-align: center;
+  color: #5f6368;
+  font-size: 14px;
+}
+
 /* Main Content */
 .main-content {
   flex: 1;
@@ -431,6 +672,12 @@
   display: flex;
   gap: 4px;
   justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.file-item:hover .file-actions {
+  opacity: 1;
 }
 
 .icon-btn-small {
@@ -529,6 +776,19 @@
   font-size: 14px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   z-index: 1000;
+  animation: slideUpNotification 0.3s ease-out;
+  transition: opacity 0.3s;
+}
+
+@keyframes slideUpNotification {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* Drop Overlay */

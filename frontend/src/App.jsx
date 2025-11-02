@@ -27,6 +27,14 @@ const App = () => {
         }
       />
       <Route
+        path="/home"
+        element={
+          <ProtectedRoute isAuthenticated={isAuthenticated}>
+            <Dashboard view="home" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/recent"
         element={
           <ProtectedRoute isAuthenticated={isAuthenticated}>
@@ -39,6 +47,22 @@ const App = () => {
         element={
           <ProtectedRoute isAuthenticated={isAuthenticated}>
             <Dashboard view="starred" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shared-with-me"
+        element={
+          <ProtectedRoute isAuthenticated={isAuthenticated}>
+            <Dashboard view="shared-with-me" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/spam"
+        element={
+          <ProtectedRoute isAuthenticated={isAuthenticated}>
+            <Dashboard view="spam" />
           </ProtectedRoute>
         }
       />

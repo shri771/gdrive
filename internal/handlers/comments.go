@@ -12,12 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type CommentHandler struct {
-	queries *database.Queries
+// Hub interface for WebSocket broadcasting
+type CommentHub interface {
+	BroadcastComment(fileID uuid.UUID, messageType string, comment interface{}, commentID uuid.UUID)
 }
 
-func NewCommentHandler(queries *database.Queries) *CommentHandler {
-	return &CommentHandler{queries: queries}
+type CommentHandler struct {
+	queries *database.Queries
+	hub     CommentHub
+}
+
+func NewCommentHandler(queries *database.Queries, hub CommentHub) *CommentHandler {
+	return &CommentHandler{
+		queries: queries,
+		hub:     hub,
+	}
 }
 
 type CreateCommentRequest struct {
@@ -118,6 +127,11 @@ func (h *CommentHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		Content:   comment.Content,
 		CreatedAt: comment.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: comment.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+	}
+
+	// Broadcast comment creation via WebSocket
+	if h.hub != nil {
+		h.hub.BroadcastComment(uuid.UUID(fileID), "comment_created", response, uuid.UUID(comment.ID.Bytes))
 	}
 
 	respondWithJSON(w, http.StatusCreated, response)
@@ -262,6 +276,11 @@ func (h *CommentHandler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt: comment.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
 	}
 
+	// Broadcast comment update via WebSocket
+	if h.hub != nil {
+		h.hub.BroadcastComment(uuid.UUID(existingComment.FileID.Bytes), "comment_updated", response, uuid.UUID(comment.ID.Bytes))
+	}
+
 	respondWithJSON(w, http.StatusOK, response)
 }
 
@@ -298,6 +317,11 @@ func (h *CommentHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to delete comment")
 		return
+	}
+
+	// Broadcast comment deletion via WebSocket
+	if h.hub != nil {
+		h.hub.BroadcastComment(uuid.UUID(existingComment.FileID.Bytes), "comment_deleted", nil, uuid.UUID(commentID))
 	}
 
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "comment deleted successfully"})

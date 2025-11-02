@@ -5,17 +5,21 @@ import { filesAPI, foldersAPI } from '../services/api';
 import { useDropzone } from 'react-dropzone';
 import {
   Search, Grid3x3, List, Settings, HelpCircle, Menu, Home,
-  Clock, Star, Trash2, Upload, FolderPlus, ChevronDown,
-  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal, Eye, Info, HardDrive
+  Clock, Star, Trash2, Upload, FolderPlus, ChevronDown, ChevronRight,
+  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal, Eye, Info, HardDrive,
+  Monitor, Users, AlertCircle, Cloud
 } from 'lucide-react';
 import ShareDialog from '../components/ShareDialog';
 import AdvancedSearch from '../components/AdvancedSearch';
 import FileViewer from '../components/FileViewer';
-import ContextMenu from '../components/ContextMenu';
+import DriveContextMenu from '../components/DriveContextMenu';
+import AnimatedStar from '../components/AnimatedStar';
 import ActivityPanel from '../components/ActivityPanel';
+import ActivityWidget from '../components/ActivityWidget';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import DetailsPanel from '../components/DetailsPanel';
 import StorageAnalytics from '../components/StorageAnalytics';
+import { useSpring, animated } from 'react-spring';
 import './Dashboard.css';
 
 const Dashboard = ({ view = 'my-drive' }) => {
@@ -29,6 +33,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadComplete, setUploadComplete] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [shareDialog, setShareDialog] = useState({ show: false, item: null, type: null });
@@ -56,6 +61,22 @@ const Dashboard = ({ view = 'my-drive' }) => {
     try {
       let data;
       switch (currentView) {
+        case 'home':
+          // Home view - show suggested files and folders
+          try {
+            const homeFiles = await filesAPI.getRecentFiles();
+            const homeFolders = await foldersAPI.getFolders(null);
+            setFiles(homeFiles?.slice(0, 10) || []);
+            setFolders(homeFolders?.slice(0, 5) || []);
+          } catch (err) {
+            console.error('Error loading home data:', err);
+            // Also try loading all files/folders as fallback
+            const allFiles = await filesAPI.getFiles(null);
+            const allFolders = await foldersAPI.getFolders(null);
+            setFiles(allFiles?.slice(0, 10) || []);
+            setFolders(allFolders?.slice(0, 5) || []);
+          }
+          break;
         case 'recent':
           data = await filesAPI.getRecentFiles();
           setFiles(data || []);
@@ -67,17 +88,33 @@ const Dashboard = ({ view = 'my-drive' }) => {
           setFiles(starredFiles || []);
           setFolders(starredFolders || []);
           break;
+        case 'shared-with-me':
+          // TODO: Get shared files
+          setFiles([]);
+          setFolders([]);
+          break;
+        case 'spam':
+          // TODO: Get spam files
+          setFiles([]);
+          setFolders([]);
+          break;
         case 'trash':
           const trashedFiles = await filesAPI.getTrashedFiles();
           const trashedFolders = await foldersAPI.getTrashedFolders();
           setFiles(trashedFiles || []);
           setFolders(trashedFolders || []);
           break;
-        default:
+        case 'my-drive':
           const filesData = await filesAPI.getFiles(currentFolder);
           const foldersData = await foldersAPI.getFolders(currentFolder);
           setFiles(filesData || []);
           setFolders(foldersData || []);
+          break;
+        default:
+          const allFilesData = await filesAPI.getFiles(currentFolder);
+          const allFoldersData = await foldersAPI.getFolders(currentFolder);
+          setFiles(allFilesData || []);
+          setFolders(allFoldersData || []);
       }
     } catch (error) {
       console.error('Error loading files:', error);
@@ -105,16 +142,23 @@ const Dashboard = ({ view = 'my-drive' }) => {
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setUploading(true);
+    setUploadComplete(false);
     try {
       for (const file of acceptedFiles) {
         await filesAPI.uploadFile(file, currentFolder);
       }
       await loadFiles();
+      setUploadComplete(true);
+      // Keep upload message visible for 3 seconds after completion
+      setTimeout(() => {
+        setUploading(false);
+        setUploadComplete(false);
+      }, 3000);
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to upload files');
-    } finally {
       setUploading(false);
+      setUploadComplete(false);
     }
   }, [loadFiles, currentFolder]);
 
@@ -275,132 +319,11 @@ const Dashboard = ({ view = 'my-drive' }) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const menuItems = [];
-
-    if (type === 'file') {
-      if (currentView === 'trash') {
-        menuItems.push(
-          {
-            label: 'Restore',
-            icon: <Upload size={16} />,
-            action: () => handleRestore(item.id)
-          },
-          { divider: true },
-          {
-            label: 'Delete forever',
-            icon: <Trash2 size={16} />,
-            action: () => handlePermanentDeleteFile(item.id)
-          }
-        );
-      } else {
-        menuItems.push(
-          {
-            label: 'Open',
-            icon: <Eye size={16} />,
-            action: () => handleFileClick(item)
-          },
-          { divider: true },
-          {
-            label: 'Download',
-            icon: <Download size={16} />,
-            action: () => handleDownload(item),
-            shortcut: 'Ctrl+S'
-          },
-          {
-            label: 'Version history',
-            icon: <Clock size={16} />,
-            action: () => setVersionHistoryFile(item)
-          },
-          {
-            label: 'Share',
-            icon: <Share2 size={16} />,
-            action: () => openShareDialog(item, 'file')
-          },
-          {
-            label: 'View details',
-            icon: <Info size={16} />,
-            action: () => {
-              setSelectedItemForDetails(item);
-              setSelectedItemType('file');
-              setDetailsPanelOpen(true);
-            },
-            shortcut: 'Ctrl+Alt+D'
-          },
-          { divider: true },
-          {
-            label: item.is_starred ? 'Remove star' : 'Add star',
-            icon: item.is_starred ? <StarOff size={16} /> : <Star size={16} />,
-            action: () => handleToggleStar(item.id)
-          },
-          { divider: true },
-          {
-            label: 'Move to trash',
-            icon: <Trash2 size={16} />,
-            action: () => handleDelete(item.id)
-          }
-        );
-      }
-    } else {
-      // Folder menu
-      if (currentView === 'trash') {
-        menuItems.push(
-          {
-            label: 'Restore',
-            icon: <Upload size={16} />,
-            action: () => handleRestoreFolder(item.id)
-          },
-          { divider: true },
-          {
-            label: 'Delete forever',
-            icon: <Trash2 size={16} />,
-            action: () => handlePermanentDeleteFolder(item.id)
-          }
-        );
-      } else {
-        menuItems.push(
-          {
-            label: 'Open',
-            icon: <Folder size={16} />,
-            action: () => handleFolderClick(item)
-          },
-          { divider: true },
-          {
-            label: 'Share',
-            icon: <Share2 size={16} />,
-            action: () => openShareDialog(item, 'folder')
-          },
-          {
-            label: 'View details',
-            icon: <Info size={16} />,
-            action: () => {
-              setSelectedItemForDetails(item);
-              setSelectedItemType('folder');
-              setDetailsPanelOpen(true);
-            },
-            shortcut: 'Ctrl+Alt+D'
-          },
-          { divider: true },
-          {
-            label: item.is_starred ? 'Remove star' : 'Add star',
-            icon: item.is_starred ? <StarOff size={16} /> : <Star size={16} />,
-            action: () => handleToggleStarFolder(item.id)
-          },
-          { divider: true },
-          {
-            label: 'Move to trash',
-            icon: <Trash2 size={16} />,
-            action: () => handleDeleteFolder(item.id)
-          }
-        );
-      }
-    }
-
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-      items: menuItems,
-      item,
-      type
+      file: type === 'file' ? item : null,
+      folder: type === 'folder' ? item : null
     });
   };
 
@@ -430,16 +353,24 @@ const Dashboard = ({ view = 'my-drive' }) => {
     if (files.length === 0) return;
 
     setUploading(true);
+    setUploadComplete(false);
     try {
       for (const file of files) {
         await filesAPI.uploadFile(file, currentFolder);
       }
       await loadFiles();
+      setUploadComplete(true);
+      // Keep upload message visible for 3 seconds after completion
+      setTimeout(() => {
+        setUploading(false);
+        setUploadComplete(false);
+      }, 3000);
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to upload files');
-    } finally {
       setUploading(false);
+      setUploadComplete(false);
+    } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -566,10 +497,13 @@ const Dashboard = ({ view = 'my-drive' }) => {
 
   const getViewTitle = () => {
     switch (currentView) {
+      case 'home': return 'Welcome to Drive';
       case 'recent': return 'Recent';
       case 'starred': return 'Starred';
+      case 'shared-with-me': return 'Shared with me';
+      case 'spam': return 'Spam';
       case 'trash': return 'Trash';
-      default: return 'My Drive';
+      default: return currentFolder ? folderPath[folderPath.length - 1]?.name || 'Folder' : 'My Drive';
     }
   };
 
@@ -760,6 +694,19 @@ const Dashboard = ({ view = 'my-drive' }) => {
 
           <nav className="sidebar-nav">
             <button
+              className={`nav-item ${currentView === 'home' ? 'active' : ''}`}
+              onClick={() => {
+                setCurrentFolder(null);
+                setFolderPath([{ id: null, name: 'My Drive' }]);
+                navigate('/home');
+              }}
+            >
+              <Home size={20} />
+              <span>Home</span>
+            </button>
+            
+            {/* My Drive */}
+            <button
               className={`nav-item ${currentView === 'my-drive' ? 'active' : ''}`}
               onClick={() => {
                 setCurrentFolder(null);
@@ -767,9 +714,18 @@ const Dashboard = ({ view = 'my-drive' }) => {
                 navigate('/');
               }}
             >
-              <Home size={20} />
+              <Folder size={20} />
               <span>My Drive</span>
             </button>
+
+            <button 
+              className={`nav-item ${currentView === 'shared-with-me' ? 'active' : ''}`}
+              onClick={() => navigate('/shared-with-me')}
+            >
+              <Users size={20} />
+              <span>Shared with me</span>
+            </button>
+            
             <button 
               className={`nav-item ${currentView === 'recent' ? 'active' : ''}`}
               onClick={() => navigate('/recent')}
@@ -777,6 +733,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
               <Clock size={20} />
               <span>Recent</span>
             </button>
+            
             <button 
               className={`nav-item ${currentView === 'starred' ? 'active' : ''}`}
               onClick={() => navigate('/starred')}
@@ -784,6 +741,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
               <Star size={20} />
               <span>Starred</span>
             </button>
+            
+            <button 
+              className={`nav-item ${currentView === 'spam' ? 'active' : ''}`}
+              onClick={() => navigate('/spam')}
+            >
+              <AlertCircle size={20} />
+              <span>Spam</span>
+            </button>
+            
             <button 
               className={`nav-item ${currentView === 'trash' ? 'active' : ''}`}
               onClick={() => navigate('/trash')}
@@ -792,6 +758,18 @@ const Dashboard = ({ view = 'my-drive' }) => {
               <span>Trash</span>
             </button>
           </nav>
+
+          {/* Storage section */}
+          <div className="sidebar-storage">
+            <div className="storage-label">Storage</div>
+            <div className="storage-progress">
+              <div className="storage-progress-bar">
+                <div className="storage-progress-fill" style={{ width: '2.5%' }}></div>
+              </div>
+              <div className="storage-text">49.71 GB of 2 TB used</div>
+            </div>
+            <button className="storage-upgrade-btn">Get more storage</button>
+          </div>
         </aside>
 
         {/* Main Content */}
@@ -879,7 +857,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
 
           {uploading && (
             <div className="upload-progress">
-              Uploading files to {currentFolder ? folderPath[folderPath.length - 1]?.name || 'folder' : 'My Drive'}...
+              {uploadComplete ? '✅ Upload complete!' : `Uploading files to ${currentFolder ? folderPath[folderPath.length - 1]?.name || 'folder' : 'My Drive'}...`}
             </div>
           )}
 
@@ -887,7 +865,73 @@ const Dashboard = ({ view = 'my-drive' }) => {
             <div className="loading">Loading...</div>
           ) : (
             <>
-              {viewMode === 'list' ? (
+              {/* Home View - Special Layout */}
+              {currentView === 'home' ? (
+                <div className="home-view">
+                  <div className="home-sections">
+                      {/* Suggested Folders */}
+                      <div className="home-section">
+                        <div className="home-section-header">
+                          <h3>Suggested folders</h3>
+                          <ChevronDown size={20} />
+                        </div>
+                        {displayFolders.length > 0 ? (
+                          <div className="home-items-grid">
+                            {displayFolders.slice(0, 3).map((folder) => (
+                              <div
+                                key={folder.id}
+                                className="home-item"
+                                onClick={() => handleFolderClick(folder)}
+                              >
+                                <Folder size={24} className="home-item-icon" />
+                                <div className="home-item-info">
+                                  <div className="home-item-name">{folder.name}</div>
+                                  <div className="home-item-meta">In My Drive</div>
+                                </div>
+                                <MoreVertical size={16} className="home-item-menu" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="home-empty">No folders available</div>
+                        )}
+                      </div>
+
+                      {/* Suggested Files */}
+                      <div className="home-section">
+                        <div className="home-section-header">
+                          <h3>Suggested files</h3>
+                          <div className="home-view-toggle">
+                            <List size={16} />
+                            <Grid3x3 size={16} />
+                          </div>
+                        </div>
+                        {displayFiles.length > 0 ? (
+                          <div className="home-files-list">
+                            {displayFiles.map((file) => (
+                              <div
+                                key={file.id}
+                                className="home-file-item"
+                                onClick={() => handleFileClick(file)}
+                              >
+                                {getFileIcon(file.name, true)}
+                                <div className="home-file-info">
+                                  <div className="home-file-name">{file.name}</div>
+                                  <div className="home-file-details">
+                                    {file.last_accessed_at ? `You opened • ${formatDate(file.last_accessed_at)}` : `Modified • ${formatDate(file.updated_at)}`}
+                                  </div>
+                                </div>
+                                <MoreVertical size={16} className="home-file-menu" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="home-empty">No files available. Upload some files to get started!</div>
+                        )}
+                      </div>
+                    </div>
+                </div>
+              ) : viewMode === 'list' ? (
                 <div className="file-list">
                   {/* Table Header */}
                   {(displayFiles.length > 0 || displayFolders.length > 0) && currentView !== 'recent' && (
@@ -924,17 +968,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                                 <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
                                 <div className="file-size">{formatFileSize(file.size)}</div>
                                 <div className="file-actions">
-                                  <button
-                                    className="icon-btn-small"
-                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
-                                    title={file.starred ? "Remove star" : "Add star"}
-                                  >
-                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
-                                  </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                  <AnimatedStar
+                                    isStarred={file.starred}
+                                    size={16}
+                                    onClick={(e) => handleToggleStar(file.id)}
+                                  />
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(file, 'file'); }} title="Share">
                                     <Share2 size={16} />
                                   </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownload(file); }} title="Download">
                                     <Download size={16} />
                                   </button>
                                 </div>
@@ -961,17 +1003,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                                 <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
                                 <div className="file-size">{formatFileSize(file.size)}</div>
                                 <div className="file-actions">
-                                  <button
-                                    className="icon-btn-small"
-                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
-                                    title={file.starred ? "Remove star" : "Add star"}
-                                  >
-                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
-                                  </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                  <AnimatedStar
+                                    isStarred={file.starred}
+                                    size={16}
+                                    onClick={(e) => handleToggleStar(file.id)}
+                                  />
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(file, 'file'); }} title="Share">
                                     <Share2 size={16} />
                                   </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownload(file); }} title="Download">
                                     <Download size={16} />
                                   </button>
                                 </div>
@@ -998,17 +1038,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                                 <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
                                 <div className="file-size">{formatFileSize(file.size)}</div>
                                 <div className="file-actions">
-                                  <button
-                                    className="icon-btn-small"
-                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
-                                    title={file.starred ? "Remove star" : "Add star"}
-                                  >
-                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
-                                  </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                  <AnimatedStar
+                                    isStarred={file.starred}
+                                    size={16}
+                                    onClick={(e) => handleToggleStar(file.id)}
+                                  />
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(file, 'file'); }} title="Share">
                                     <Share2 size={16} />
                                   </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownload(file); }} title="Download">
                                     <Download size={16} />
                                   </button>
                                 </div>
@@ -1035,17 +1073,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                                 <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
                                 <div className="file-size">{formatFileSize(file.size)}</div>
                                 <div className="file-actions">
-                                  <button
-                                    className="icon-btn-small"
-                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
-                                    title={file.starred ? "Remove star" : "Add star"}
-                                  >
-                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
-                                  </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                  <AnimatedStar
+                                    isStarred={file.starred}
+                                    size={16}
+                                    onClick={(e) => handleToggleStar(file.id)}
+                                  />
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(file, 'file'); }} title="Share">
                                     <Share2 size={16} />
                                   </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownload(file); }} title="Download">
                                     <Download size={16} />
                                   </button>
                                 </div>
@@ -1072,17 +1108,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
                                 <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
                                 <div className="file-size">{formatFileSize(file.size)}</div>
                                 <div className="file-actions">
-                                  <button
-                                    className="icon-btn-small"
-                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
-                                    title={file.starred ? "Remove star" : "Add star"}
-                                  >
-                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
-                                  </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                  <AnimatedStar
+                                    isStarred={file.starred}
+                                    size={16}
+                                    onClick={(e) => handleToggleStar(file.id)}
+                                  />
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(file, 'file'); }} title="Share">
                                     <Share2 size={16} />
                                   </button>
-                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownload(file); }} title="Download">
                                     <Download size={16} />
                                   </button>
                                 </div>
@@ -1142,23 +1176,21 @@ const Dashboard = ({ view = 'my-drive' }) => {
                               </>
                             ) : (
                               <>
+                                  <AnimatedStar
+                                    isStarred={folder.is_starred}
+                                    size={16}
+                                    onClick={(e) => handleToggleStarFolder(folder.id)}
+                                  />
                                 <button
                                   className="icon-btn-small"
-                                  onClick={(e) => { e.stopPropagation(); handleToggleStarFolder(folder.id); }}
-                                  title={folder.is_starred ? "Remove star" : "Add star"}
-                                >
-                                  {folder.is_starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
-                                </button>
-                                <button
-                                  className="icon-btn-small"
-                                  onClick={(e) => { e.stopPropagation(); handleShare(folder, 'folder'); }}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(folder, 'folder'); }}
                                   title="Share"
                                 >
                                   <Share2 size={16} />
                                 </button>
                                 <button
                                   className="icon-btn-small"
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDeleteFolder(folder.id); }}
                                   title="Move to trash"
                                 >
                                   <Trash2 size={16} />
@@ -1194,7 +1226,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
                           <div className="file-actions">
                             <button
                               className="icon-btn-small"
-                              onClick={() => handleToggleStar(file.id)}
+                              onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleToggleStar(file.id); }}
                               title={file.starred ? "Remove star" : "Add star"}
                             >
                               {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
@@ -1203,14 +1235,14 @@ const Dashboard = ({ view = 'my-drive' }) => {
                               <>
                                 <button
                                   className="icon-btn-small"
-                                  onClick={() => handleRestore(file.id)}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleRestore(file.id); }}
                                   title="Restore"
                                 >
                                   <Upload size={16} />
                                 </button>
                                 <button
                                   className="icon-btn-small"
-                                  onClick={() => handlePermanentDeleteFile(file.id)}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePermanentDeleteFile(file.id); }}
                                   title="Delete forever"
                                 >
                                   <Trash2 size={16} />
@@ -1220,21 +1252,21 @@ const Dashboard = ({ view = 'my-drive' }) => {
                               <>
                                 <button
                                   className="icon-btn-small"
-                                  onClick={() => handleShare(file, 'file')}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleShare(file, 'file'); }}
                                   title="Share"
                                 >
                                   <Share2 size={16} />
                                 </button>
                                 <button
                                   className="icon-btn-small"
-                                  onClick={() => handleDownload(file)}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownload(file); }}
                                   title="Download"
                                 >
                                   <Download size={16} />
                                 </button>
                                 <button
                                   className="icon-btn-small"
-                                  onClick={() => handleDelete(file.id)}
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDelete(file.id); }}
                                   title="Move to trash"
                                 >
                                   <Trash2 size={16} />
@@ -1405,13 +1437,48 @@ const Dashboard = ({ view = 'my-drive' }) => {
 
       {/* Context Menu */}
       {contextMenu && (
-        <ContextMenu
+        <DriveContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={contextMenu.items}
-          file={contextMenu.type === 'file' ? contextMenu.item : null}
-          folder={contextMenu.type === 'folder' ? contextMenu.item : null}
+          file={contextMenu.file}
+          folder={contextMenu.folder}
           onClose={() => setContextMenu(null)}
+          onOpen={(item) => {
+            if (contextMenu.file) {
+              handleFileClick(item);
+            } else if (contextMenu.folder) {
+              handleFolderClick(item);
+            }
+          }}
+          onDownload={handleDownload}
+          onShare={(item, type) => openShareDialog(item, type)}
+          onStar={(id) => {
+            if (contextMenu.file) {
+              handleToggleStar(id);
+            } else if (contextMenu.folder) {
+              handleToggleStarFolder(id);
+            }
+          }}
+          onDelete={(id) => {
+            if (contextMenu.file) {
+              handleDelete(id);
+            } else if (contextMenu.folder) {
+              handleDeleteFolder(id);
+            }
+          }}
+          onMove={(id) => {
+            // TODO: Implement move functionality
+            console.log('Move item:', id);
+          }}
+          onRename={(item) => {
+            // TODO: Implement rename functionality
+            console.log('Rename item:', item);
+          }}
+          onDetails={(item, type) => {
+            setSelectedItemForDetails(item);
+            setSelectedItemType(type);
+            setDetailsPanelOpen(true);
+          }}
         />
       )}
 

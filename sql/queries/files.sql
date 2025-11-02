@@ -97,3 +97,27 @@ WHERE owner_id = $1
   AND status = 'active'
   AND mime_type LIKE $2 || '%'
 ORDER BY updated_at DESC;
+
+-- name: GetFilesInTrashOlderThan :many
+SELECT * FROM files
+WHERE status = 'trashed'
+  AND trashed_at < NOW() - INTERVAL '1 day' * $1
+ORDER BY trashed_at ASC;
+
+-- name: GetFileByNameAndFolder :one
+SELECT * FROM files
+WHERE owner_id = $1
+  AND name = $2
+  AND (parent_folder_id = $3 OR (parent_folder_id IS NULL AND $3 IS NULL))
+  AND status = 'active'
+LIMIT 1;
+
+-- name: UpdateFileStorageAndVersion :exec
+UPDATE files
+SET storage_path = $2,
+    size = $3,
+    mime_type = $4,
+    version = $5,
+    current_version_id = $6,
+    updated_at = NOW()
+WHERE id = $1;

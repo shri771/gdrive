@@ -295,6 +295,19 @@ export const activityAPI = {
     const response = await api.get(`/activity/file?file_id=${fileId}&limit=${limit}`);
     return response.data;
   },
+
+  getActivityTimeline: async (startDate, endDate) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const response = await api.get(`/activity/timeline?${params.toString()}`);
+    return response.data;
+  },
+
+  getDashboardActivity: async (limit = 10) => {
+    const response = await api.get(`/activity/dashboard?limit=${limit}`);
+    return response.data;
+  },
 };
 
 // Versions API
