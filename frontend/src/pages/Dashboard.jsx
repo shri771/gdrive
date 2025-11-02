@@ -6,7 +6,7 @@ import { useDropzone } from 'react-dropzone';
 import {
   Search, Grid3x3, List, Settings, HelpCircle, Menu, Home,
   Clock, Star, Trash2, Upload, FolderPlus, ChevronDown,
-  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal, Eye, Info
+  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal, Eye, Info, HardDrive
 } from 'lucide-react';
 import ShareDialog from '../components/ShareDialog';
 import AdvancedSearch from '../components/AdvancedSearch';
@@ -15,6 +15,7 @@ import ContextMenu from '../components/ContextMenu';
 import ActivityPanel from '../components/ActivityPanel';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import DetailsPanel from '../components/DetailsPanel';
+import StorageAnalytics from '../components/StorageAnalytics';
 import './Dashboard.css';
 
 const Dashboard = ({ view = 'my-drive' }) => {
@@ -45,6 +46,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [selectedItemForDetails, setSelectedItemForDetails] = useState(null);
   const [selectedItemType, setSelectedItemType] = useState(null);
+  const [showStorageAnalytics, setShowStorageAnalytics] = useState(false);
   const fileInputRef = useRef(null);
 
   const currentView = view;
@@ -677,6 +679,13 @@ const Dashboard = ({ view = 'my-drive' }) => {
           </button>
           <button className="icon-btn" title="Help">
             <HelpCircle size={20} />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => setShowStorageAnalytics(true)}
+            title="Storage"
+          >
+            <HardDrive size={20} />
           </button>
           <button className="icon-btn" title="Settings">
             <Settings size={20} />
@@ -1390,6 +1399,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
             await handleDelete(file.id);
             handleCloseViewer();
           }}
+          currentUser={user}
         />
       )}
 
@@ -1429,6 +1439,11 @@ const Dashboard = ({ view = 'my-drive' }) => {
           setSelectedItemType(null);
         }}
       />
+
+      {/* Storage Analytics */}
+      {showStorageAnalytics && (
+        <StorageAnalytics onClose={() => setShowStorageAnalytics(false)} />
+      )}
     </div>
   );
 };

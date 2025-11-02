@@ -310,4 +310,40 @@ export const versionsAPI = {
   },
 };
 
+// Comments API
+export const commentsAPI = {
+  createComment: async (fileId, content) => {
+    const response = await api.post('/comments', {
+      file_id: fileId,
+      content,
+    });
+    return response.data;
+  },
+
+  getFileComments: async (fileId) => {
+    const response = await api.get(`/comments?file_id=${fileId}`);
+    return response.data;
+  },
+
+  updateComment: async (commentId, content) => {
+    const response = await api.put(`/comments/${commentId}`, {
+      content,
+    });
+    return response.data;
+  },
+
+  deleteComment: async (commentId) => {
+    const response = await api.delete(`/comments/${commentId}`);
+    return response.data;
+  },
+};
+
+// Storage API
+export const storageAPI = {
+  getAnalytics: async () => {
+    const response = await api.get('/storage/analytics');
+    return response.data;
+  },
+};
+
 export default api;

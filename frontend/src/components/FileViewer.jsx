@@ -2,18 +2,20 @@ import { useState, useEffect } from 'react';
 import {
   X, Download, Share2, MoreVertical, ChevronLeft, ChevronRight,
   Star, StarOff, Trash2, Info, ExternalLink, ZoomIn, ZoomOut,
-  RotateCw, Maximize2, Printer
+  RotateCw, Maximize2, Printer, MessageSquare
 } from 'lucide-react';
 import { filesAPI } from '../services/api';
+import CommentsPanel from './CommentsPanel';
 import './FileViewer.css';
 
-const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, onDelete }) => {
+const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, onDelete, currentUser }) => {
   const [fileUrl, setFileUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [zoom, setZoom] = useState(100);
   const [rotation, setRotation] = useState(0);
   const [showInfo, setShowInfo] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const currentIndex = files.findIndex(f => f.id === file.id);
   const hasPrevious = currentIndex > 0;
@@ -264,8 +266,16 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
           </button>
 
           <button
+            onClick={() => setShowComments(!showComments)}
+            className={`viewer-icon-btn ${showComments ? 'active' : ''}`}
+            title="Comments"
+          >
+            <MessageSquare size={20} />
+          </button>
+
+          <button
             onClick={() => setShowInfo(!showInfo)}
-            className="viewer-icon-btn"
+            className={`viewer-icon-btn ${showInfo ? 'active' : ''}`}
             title="Info"
           >
             <Info size={20} />
@@ -303,6 +313,13 @@ const FileViewer = ({ file, files = [], onClose, onFileChange, onShare, onStar, 
         <div className="file-content">
           {renderFileContent()}
         </div>
+
+        {/* Comments Panel */}
+        {showComments && (
+          <div className="comments-panel-container">
+            <CommentsPanel fileId={file.id} currentUser={currentUser} />
+          </div>
+        )}
 
         {/* Info Panel */}
         {showInfo && (

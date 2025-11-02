@@ -90,6 +90,8 @@ func main() {
 	sharingHandler := handlers.NewSharingHandler(queries, authService)
 	versionsHandler := handlers.NewVersionsHandler(queries)
 	activityHandler := handlers.NewActivityHandler(queries)
+	commentHandler := handlers.NewCommentHandler(queries)
+	storageHandler := handlers.NewStorageHandler(queries)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -182,6 +184,17 @@ func main() {
 			r.Get("/", activityHandler.GetUserActivity)
 			r.Get("/file", activityHandler.GetFileActivity)
 		})
+
+		// Comment routes
+		r.Route("/comments", func(r chi.Router) {
+			r.Post("/", commentHandler.CreateComment)
+			r.Get("/", commentHandler.GetFileComments)
+			r.Put("/{id}", commentHandler.UpdateComment)
+			r.Delete("/{id}", commentHandler.DeleteComment)
+		})
+
+		// Storage analytics routes
+		r.Get("/storage/analytics", storageHandler.GetStorageAnalytics)
 	})
 
 	// Start server

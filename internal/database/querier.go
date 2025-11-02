@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	CreateComment(ctx context.Context, arg CreateCommentParams) (Comment, error)
 	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
 	CreateFileVersion(ctx context.Context, arg CreateFileVersionParams) (FileVersion, error)
 	CreateFolder(ctx context.Context, arg CreateFolderParams) (Folder, error)
@@ -19,13 +20,17 @@ type Querier interface {
 	CreateShare(ctx context.Context, arg CreateShareParams) (Share, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateShare(ctx context.Context, id pgtype.UUID) error
+	DeleteComment(ctx context.Context, id pgtype.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteFileVersions(ctx context.Context, fileID pgtype.UUID) error
 	DeleteSession(ctx context.Context, token string) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
+	GetComment(ctx context.Context, id pgtype.UUID) (Comment, error)
+	GetCommentsByUser(ctx context.Context, arg GetCommentsByUserParams) ([]GetCommentsByUserRow, error)
 	GetFileActivity(ctx context.Context, arg GetFileActivityParams) ([]GetFileActivityRow, error)
 	GetFileByID(ctx context.Context, id pgtype.UUID) (File, error)
 	GetFileByIDAnyStatus(ctx context.Context, id pgtype.UUID) (File, error)
+	GetFileComments(ctx context.Context, fileID pgtype.UUID) ([]GetFileCommentsRow, error)
 	GetFileVersion(ctx context.Context, id pgtype.UUID) (GetFileVersionRow, error)
 	GetFileVersions(ctx context.Context, fileID pgtype.UUID) ([]GetFileVersionsRow, error)
 	GetFilesByFolder(ctx context.Context, arg GetFilesByFolderParams) ([]File, error)
@@ -36,6 +41,7 @@ type Querier interface {
 	GetItemPermissions(ctx context.Context, arg GetItemPermissionsParams) ([]GetItemPermissionsRow, error)
 	GetLatestVersionNumber(ctx context.Context, fileID pgtype.UUID) (interface{}, error)
 	GetRecentFiles(ctx context.Context, arg GetRecentFilesParams) ([]File, error)
+	GetRecentStorageGrowth(ctx context.Context, ownerID pgtype.UUID) ([]GetRecentStorageGrowthRow, error)
 	GetRootFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error)
 	GetRootFolder(ctx context.Context, ownerID pgtype.UUID) (Folder, error)
 	GetRootFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error)
@@ -46,6 +52,7 @@ type Querier interface {
 	GetSharesByItem(ctx context.Context, arg GetSharesByItemParams) ([]Share, error)
 	GetStarredFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error)
 	GetStarredFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error)
+	GetStorageByFileType(ctx context.Context, ownerID pgtype.UUID) ([]GetStorageByFileTypeRow, error)
 	GetStorageUsage(ctx context.Context, id pgtype.UUID) (GetStorageUsageRow, error)
 	GetSubfolders(ctx context.Context, parentFolderID pgtype.UUID) ([]Folder, error)
 	GetTrashedFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error)
@@ -54,6 +61,7 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserPermissionForItem(ctx context.Context, arg GetUserPermissionForItemParams) (Permission, error)
+	GetUserStorageStats(ctx context.Context, id pgtype.UUID) (GetUserStorageStatsRow, error)
 	LogActivity(ctx context.Context, arg LogActivityParams) error
 	MoveFile(ctx context.Context, arg MoveFileParams) error
 	MoveFolder(ctx context.Context, arg MoveFolderParams) error
@@ -71,6 +79,7 @@ type Querier interface {
 	ToggleStarFolder(ctx context.Context, id pgtype.UUID) error
 	TrashFile(ctx context.Context, id pgtype.UUID) error
 	TrashFolder(ctx context.Context, id pgtype.UUID) error
+	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
 	UpdateLastAccessed(ctx context.Context, id pgtype.UUID) error
 	UpdateUserStorage(ctx context.Context, arg UpdateUserStorageParams) error
 }

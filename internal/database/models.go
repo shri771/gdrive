@@ -200,6 +200,16 @@ type ActivityLog struct {
 	CreatedAt    pgtype.Timestamp `json:"created_at"`
 }
 
+type Comment struct {
+	ID        pgtype.UUID      `json:"id"`
+	FileID    pgtype.UUID      `json:"file_id"`
+	UserID    pgtype.UUID      `json:"user_id"`
+	Content   string           `json:"content"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+	UpdatedAt pgtype.Timestamp `json:"updated_at"`
+	IsDeleted bool             `json:"is_deleted"`
+}
+
 type File struct {
 	ID               pgtype.UUID      `json:"id"`
 	Name             string           `json:"name"`

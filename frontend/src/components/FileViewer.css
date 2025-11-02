@@ -405,3 +405,16 @@
 .info-content::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Active state for toolbar buttons */
+.viewer-icon-btn.active {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Comments Panel Container */
+.comments-panel-container {
+  width: 400px;
+  height: 100%;
+  background: #fff;
+  flex-shrink: 0;
+}
