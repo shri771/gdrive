@@ -349,6 +349,24 @@
   overflow: hidden;
 }
 
+.file-list-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 120px 100px;
+  align-items: center;
+  padding: 0 16px;
+  height: 48px;
+  border-bottom: 1px solid #dadce0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5f6368;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.file-list-header > div {
+  padding: 0;
+}
+
 .file-section {
   margin-bottom: 16px;
 }

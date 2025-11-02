@@ -118,6 +118,18 @@ func (h *FilesHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create initial version record
+	_, err = h.queries.CreateFileVersion(r.Context(), database.CreateFileVersionParams{
+		FileID:       dbFile.ID,
+		VersionNumber: 1,
+		StoragePath:   storagePath,
+		Size:          header.Size,
+		UploadedBy:    session.UserID,
+	})
+	if err != nil {
+		fmt.Printf("failed to create version record: %v\n", err)
+	}
+
 	// Update user storage
 	if err := h.queries.UpdateUserStorage(r.Context(), database.UpdateUserStorageParams{
 		ID:          session.UserID,
@@ -341,6 +353,18 @@ func (h *FilesHandler) RestoreFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get file to check ownership (can be trashed)
+	dbFile, err := h.queries.GetFileByIDAnyStatus(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "file not found")
+		return
+	}
+
+	if dbFile.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
 	// Restore file
 	if err := h.queries.RestoreFile(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true}); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to restore file")
@@ -357,6 +381,48 @@ func (h *FilesHandler) RestoreFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "file restored",
+	})
+}
+
+// PermanentDeleteFile permanently deletes a file
+func (h *FilesHandler) PermanentDeleteFile(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	fileIDStr := chi.URLParam(r, "id")
+	fileID, err := uuid.Parse(fileIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid file ID")
+		return
+	}
+
+	// Get file to verify ownership before permanent deletion (can be trashed)
+	dbFile, err := h.queries.GetFileByIDAnyStatus(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "file not found")
+		return
+	}
+
+	if dbFile.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Permanently delete file
+	if err := h.queries.PermanentDeleteFile(r.Context(), pgtype.UUID{Bytes: fileID, Valid: true}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to permanently delete file")
+		return
+	}
+
+	// Note: Could also delete physical file from storage here
+	// if needed: h.storageService.DeleteFile(dbFile.StoragePath)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "file permanently deleted",
 	})
 }
 

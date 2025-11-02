@@ -6,10 +6,15 @@ import { useDropzone } from 'react-dropzone';
 import {
   Search, Grid3x3, List, Settings, HelpCircle, Menu, Home,
   Clock, Star, Trash2, Upload, FolderPlus, ChevronDown,
-  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal
+  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal, Eye, Info
 } from 'lucide-react';
 import ShareDialog from '../components/ShareDialog';
 import AdvancedSearch from '../components/AdvancedSearch';
+import FileViewer from '../components/FileViewer';
+import ContextMenu from '../components/ContextMenu';
+import ActivityPanel from '../components/ActivityPanel';
+import VersionHistoryModal from '../components/VersionHistoryModal';
+import DetailsPanel from '../components/DetailsPanel';
 import './Dashboard.css';
 
 const Dashboard = ({ view = 'my-drive' }) => {
@@ -33,11 +38,16 @@ const Dashboard = ({ view = 'my-drive' }) => {
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [searchMode, setSearchMode] = useState(false);
   const [searchResults, setSearchResults] = useState({ files: [], folders: [] });
+  const [viewingFile, setViewingFile] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+  const [versionHistoryFile, setVersionHistoryFile] = useState(null);
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
+  const [selectedItemForDetails, setSelectedItemForDetails] = useState(null);
+  const [selectedItemType, setSelectedItemType] = useState(null);
   const fileInputRef = useRef(null);
 
-  const currentView = view || (location.pathname === '/recent' ? 'recent' :
-                               location.pathname === '/starred' ? 'starred' :
-                               location.pathname === '/trash' ? 'trash' : 'my-drive');
+  const currentView = view;
 
   const loadFiles = useCallback(async () => {
     setLoading(true);
@@ -50,14 +60,16 @@ const Dashboard = ({ view = 'my-drive' }) => {
           setFolders([]);
           break;
         case 'starred':
-          data = await filesAPI.getStarredFiles();
-          setFiles(data || []);
-          setFolders([]);
+          const starredFiles = await filesAPI.getStarredFiles();
+          const starredFolders = await foldersAPI.getStarredFolders();
+          setFiles(starredFiles || []);
+          setFolders(starredFolders || []);
           break;
         case 'trash':
-          data = await filesAPI.getTrashedFiles();
-          setFiles(data || []);
-          setFolders([]);
+          const trashedFiles = await filesAPI.getTrashedFiles();
+          const trashedFolders = await foldersAPI.getTrashedFolders();
+          setFiles(trashedFiles || []);
+          setFolders(trashedFolders || []);
           break;
         default:
           const filesData = await filesAPI.getFiles(currentFolder);
@@ -76,12 +88,13 @@ const Dashboard = ({ view = 'my-drive' }) => {
     loadFiles();
   }, [loadFiles]);
 
-  // Reset folder navigation when switching views
+  // Reset folder navigation and reload when view changes
   useEffect(() => {
     if (currentView !== 'my-drive') {
       setCurrentFolder(null);
       setFolderPath([{ id: null, name: 'My Drive' }]);
     }
+    loadFiles();
   }, [currentView]);
 
   // Use search results when in search mode, otherwise use regular files/folders
@@ -185,6 +198,208 @@ const Dashboard = ({ view = 'my-drive' }) => {
     } catch (error) {
       console.error('Star error:', error);
     }
+  };
+
+  const handleToggleStarFolder = async (folderId) => {
+    try {
+      await foldersAPI.toggleStarFolder(folderId);
+      await loadFiles();
+    } catch (error) {
+      console.error('Folder star error:', error);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    if (window.confirm('Move folder to trash?')) {
+      try {
+        await foldersAPI.deleteFolder(folderId);
+        await loadFiles();
+      } catch (error) {
+        console.error('Delete folder error:', error);
+        alert('Failed to delete folder');
+      }
+    }
+  };
+
+  const handleRestoreFolder = async (folderId) => {
+    try {
+      await foldersAPI.restoreFolder(folderId);
+      await loadFiles();
+    } catch (error) {
+      console.error('Restore folder error:', error);
+      alert('Failed to restore folder');
+    }
+  };
+
+  const handlePermanentDeleteFile = async (fileId) => {
+    if (window.confirm('Permanently delete this file? This action cannot be undone.')) {
+      try {
+        await filesAPI.permanentDeleteFile(fileId);
+        await loadFiles();
+      } catch (error) {
+        console.error('Permanent delete error:', error);
+        alert('Failed to permanently delete file');
+      }
+    }
+  };
+
+  const handlePermanentDeleteFolder = async (folderId) => {
+    if (window.confirm('Permanently delete this folder? This action cannot be undone.')) {
+      try {
+        await foldersAPI.permanentDeleteFolder(folderId);
+        await loadFiles();
+      } catch (error) {
+        console.error('Permanent delete folder error:', error);
+        alert('Failed to permanently delete folder');
+      }
+    }
+  };
+
+  // File viewer handlers
+  const handleFileClick = (file) => {
+    setViewingFile(file);
+  };
+
+  const handleFileChange = (newFile) => {
+    setViewingFile(newFile);
+  };
+
+  const handleCloseViewer = () => {
+    setViewingFile(null);
+  };
+
+  // Context menu handlers
+  const handleContextMenu = (e, item, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const menuItems = [];
+
+    if (type === 'file') {
+      if (currentView === 'trash') {
+        menuItems.push(
+          {
+            label: 'Restore',
+            icon: <Upload size={16} />,
+            action: () => handleRestore(item.id)
+          },
+          { divider: true },
+          {
+            label: 'Delete forever',
+            icon: <Trash2 size={16} />,
+            action: () => handlePermanentDeleteFile(item.id)
+          }
+        );
+      } else {
+        menuItems.push(
+          {
+            label: 'Open',
+            icon: <Eye size={16} />,
+            action: () => handleFileClick(item)
+          },
+          { divider: true },
+          {
+            label: 'Download',
+            icon: <Download size={16} />,
+            action: () => handleDownload(item),
+            shortcut: 'Ctrl+S'
+          },
+          {
+            label: 'Version history',
+            icon: <Clock size={16} />,
+            action: () => setVersionHistoryFile(item)
+          },
+          {
+            label: 'Share',
+            icon: <Share2 size={16} />,
+            action: () => openShareDialog(item, 'file')
+          },
+          {
+            label: 'View details',
+            icon: <Info size={16} />,
+            action: () => {
+              setSelectedItemForDetails(item);
+              setSelectedItemType('file');
+              setDetailsPanelOpen(true);
+            },
+            shortcut: 'Ctrl+Alt+D'
+          },
+          { divider: true },
+          {
+            label: item.is_starred ? 'Remove star' : 'Add star',
+            icon: item.is_starred ? <StarOff size={16} /> : <Star size={16} />,
+            action: () => handleToggleStar(item.id)
+          },
+          { divider: true },
+          {
+            label: 'Move to trash',
+            icon: <Trash2 size={16} />,
+            action: () => handleDelete(item.id)
+          }
+        );
+      }
+    } else {
+      // Folder menu
+      if (currentView === 'trash') {
+        menuItems.push(
+          {
+            label: 'Restore',
+            icon: <Upload size={16} />,
+            action: () => handleRestoreFolder(item.id)
+          },
+          { divider: true },
+          {
+            label: 'Delete forever',
+            icon: <Trash2 size={16} />,
+            action: () => handlePermanentDeleteFolder(item.id)
+          }
+        );
+      } else {
+        menuItems.push(
+          {
+            label: 'Open',
+            icon: <Folder size={16} />,
+            action: () => handleFolderClick(item)
+          },
+          { divider: true },
+          {
+            label: 'Share',
+            icon: <Share2 size={16} />,
+            action: () => openShareDialog(item, 'folder')
+          },
+          {
+            label: 'View details',
+            icon: <Info size={16} />,
+            action: () => {
+              setSelectedItemForDetails(item);
+              setSelectedItemType('folder');
+              setDetailsPanelOpen(true);
+            },
+            shortcut: 'Ctrl+Alt+D'
+          },
+          { divider: true },
+          {
+            label: item.is_starred ? 'Remove star' : 'Add star',
+            icon: item.is_starred ? <StarOff size={16} /> : <Star size={16} />,
+            action: () => handleToggleStarFolder(item.id)
+          },
+          { divider: true },
+          {
+            label: 'Move to trash',
+            icon: <Trash2 size={16} />,
+            action: () => handleDeleteFolder(item.id)
+          }
+        );
+      }
+    }
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: menuItems,
+      item,
+      type
+    });
   };
 
   const handleCreateFolder = async () => {
@@ -356,6 +571,43 @@ const Dashboard = ({ view = 'my-drive' }) => {
     }
   };
 
+  // Group files by time periods for Recent view
+  const groupFilesByTime = (files) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const last7Days = new Date(today);
+    last7Days.setDate(last7Days.getDate() - 7);
+    const last30Days = new Date(today);
+    last30Days.setDate(last30Days.getDate() - 30);
+
+    const groups = {
+      today: [],
+      yesterday: [],
+      previous7Days: [],
+      previous30Days: [],
+      earlier: []
+    };
+
+    files.forEach(file => {
+      const fileDate = new Date(file.last_accessed_at || file.updated_at);
+      if (fileDate >= today) {
+        groups.today.push(file);
+      } else if (fileDate >= yesterday) {
+        groups.yesterday.push(file);
+      } else if (fileDate >= last7Days) {
+        groups.previous7Days.push(file);
+      } else if (fileDate >= last30Days) {
+        groups.previous30Days.push(file);
+      } else {
+        groups.earlier.push(file);
+      }
+    });
+
+    return groups;
+  };
+
   return (
     <div className="dashboard" {...getRootProps()}>
       <input {...getInputProps()} />
@@ -409,6 +661,20 @@ const Dashboard = ({ view = 'my-drive' }) => {
         </div>
 
         <div className="header-right">
+          <button
+            className={`icon-btn ${detailsPanelOpen ? 'text-blue-600' : ''}`}
+            onClick={() => setDetailsPanelOpen(!detailsPanelOpen)}
+            title="Details"
+          >
+            <Info size={20} />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => setActivityPanelOpen(true)}
+            title="Activity"
+          >
+            <Clock size={20} />
+          </button>
           <button className="icon-btn" title="Help">
             <HelpCircle size={20} />
           </button>
@@ -614,7 +880,213 @@ const Dashboard = ({ view = 'my-drive' }) => {
             <>
               {viewMode === 'list' ? (
                 <div className="file-list">
-                  {displayFolders.length > 0 && (
+                  {/* Table Header */}
+                  {(displayFiles.length > 0 || displayFolders.length > 0) && currentView !== 'recent' && (
+                    <div className="file-list-header">
+                      <div className="header-name">Name</div>
+                      <div className="header-owner">Owner</div>
+                      <div className="header-modified">Last modified</div>
+                      <div className="header-size">File size</div>
+                      <div className="header-actions"></div>
+                    </div>
+                  )}
+
+                  {/* Special rendering for Recent view with time-based grouping */}
+                  {currentView === 'recent' && displayFiles.length > 0 && (() => {
+                    const grouped = groupFilesByTime(displayFiles);
+                    return (
+                      <>
+                        {grouped.today.length > 0 && (
+                          <div className="file-section">
+                            <div className="section-header">Today</div>
+                            {grouped.today.map((file) => (
+                              <div
+                                key={file.id}
+                                className="file-item"
+                                onClick={() => handleFileClick(file)}
+                                onContextMenu={(e) => handleContextMenu(e, file, 'file')}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="file-info">
+                                  {getFileIcon(file.name, false)}
+                                  <span className="file-name">{file.name}</span>
+                                </div>
+                                <div className="file-owner">me</div>
+                                <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
+                                <div className="file-size">{formatFileSize(file.size)}</div>
+                                <div className="file-actions">
+                                  <button
+                                    className="icon-btn-small"
+                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
+                                    title={file.starred ? "Remove star" : "Add star"}
+                                  >
+                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                    <Share2 size={16} />
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                    <Download size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {grouped.yesterday.length > 0 && (
+                          <div className="file-section">
+                            <div className="section-header">Yesterday</div>
+                            {grouped.yesterday.map((file) => (
+                              <div
+                                key={file.id}
+                                className="file-item"
+                                onClick={() => handleFileClick(file)}
+                                onContextMenu={(e) => handleContextMenu(e, file, 'file')}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="file-info">
+                                  {getFileIcon(file.name, false)}
+                                  <span className="file-name">{file.name}</span>
+                                </div>
+                                <div className="file-owner">me</div>
+                                <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
+                                <div className="file-size">{formatFileSize(file.size)}</div>
+                                <div className="file-actions">
+                                  <button
+                                    className="icon-btn-small"
+                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
+                                    title={file.starred ? "Remove star" : "Add star"}
+                                  >
+                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                    <Share2 size={16} />
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                    <Download size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {grouped.previous7Days.length > 0 && (
+                          <div className="file-section">
+                            <div className="section-header">Previous 7 days</div>
+                            {grouped.previous7Days.map((file) => (
+                              <div
+                                key={file.id}
+                                className="file-item"
+                                onClick={() => handleFileClick(file)}
+                                onContextMenu={(e) => handleContextMenu(e, file, 'file')}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="file-info">
+                                  {getFileIcon(file.name, false)}
+                                  <span className="file-name">{file.name}</span>
+                                </div>
+                                <div className="file-owner">me</div>
+                                <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
+                                <div className="file-size">{formatFileSize(file.size)}</div>
+                                <div className="file-actions">
+                                  <button
+                                    className="icon-btn-small"
+                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
+                                    title={file.starred ? "Remove star" : "Add star"}
+                                  >
+                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                    <Share2 size={16} />
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                    <Download size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {grouped.previous30Days.length > 0 && (
+                          <div className="file-section">
+                            <div className="section-header">Previous 30 days</div>
+                            {grouped.previous30Days.map((file) => (
+                              <div
+                                key={file.id}
+                                className="file-item"
+                                onClick={() => handleFileClick(file)}
+                                onContextMenu={(e) => handleContextMenu(e, file, 'file')}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="file-info">
+                                  {getFileIcon(file.name, false)}
+                                  <span className="file-name">{file.name}</span>
+                                </div>
+                                <div className="file-owner">me</div>
+                                <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
+                                <div className="file-size">{formatFileSize(file.size)}</div>
+                                <div className="file-actions">
+                                  <button
+                                    className="icon-btn-small"
+                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
+                                    title={file.starred ? "Remove star" : "Add star"}
+                                  >
+                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                    <Share2 size={16} />
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                    <Download size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {grouped.earlier.length > 0 && (
+                          <div className="file-section">
+                            <div className="section-header">Earlier</div>
+                            {grouped.earlier.map((file) => (
+                              <div
+                                key={file.id}
+                                className="file-item"
+                                onClick={() => handleFileClick(file)}
+                                onContextMenu={(e) => handleContextMenu(e, file, 'file')}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="file-info">
+                                  {getFileIcon(file.name, false)}
+                                  <span className="file-name">{file.name}</span>
+                                </div>
+                                <div className="file-owner">me</div>
+                                <div className="file-modified">{formatDate(file.last_accessed_at || file.updated_at)}</div>
+                                <div className="file-size">{formatFileSize(file.size)}</div>
+                                <div className="file-actions">
+                                  <button
+                                    className="icon-btn-small"
+                                    onClick={(e) => { e.stopPropagation(); handleToggleStar(file.id); }}
+                                    title={file.starred ? "Remove star" : "Add star"}
+                                  >
+                                    {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleShare(file, 'file'); }} title="Share">
+                                    <Share2 size={16} />
+                                  </button>
+                                  <button className="icon-btn-small" onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title="Download">
+                                    <Download size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {/* Regular rendering for other views */}
+                  {currentView !== 'recent' && displayFolders.length > 0 && (
                     <div className="file-section">
                       <div className="section-header">Folders</div>
                       {displayFolders.map((folder) => (
@@ -627,6 +1099,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
                           onDragEnter={(e) => handleDragEnterFolder(e, folder)}
                           onDragLeave={handleDragLeaveFolder}
                           onDrop={(e) => handleDropOnFolder(e, folder)}
+                          onContextMenu={(e) => handleContextMenu(e, folder, 'folder')}
                           style={{
                             cursor: 'pointer',
                             backgroundColor: dragOverFolder === folder.id ? '#e8f0fe' : 'transparent',
@@ -641,23 +1114,55 @@ const Dashboard = ({ view = 'my-drive' }) => {
                           <div className="file-modified">{formatDate(folder.created_at)}</div>
                           <div className="file-size">-</div>
                           <div className="file-actions" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className="icon-btn-small"
-                              onClick={(e) => { e.stopPropagation(); handleShare(folder, 'folder'); }}
-                              title="Share"
-                            >
-                              <Share2 size={16} />
-                            </button>
-                            <button className="icon-btn-small">
-                              <MoreVertical size={16} />
-                            </button>
+                            {currentView === 'trash' ? (
+                              <>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={(e) => { e.stopPropagation(); handleRestoreFolder(folder.id); }}
+                                  title="Restore"
+                                >
+                                  <Upload size={16} />
+                                </button>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={(e) => { e.stopPropagation(); handlePermanentDeleteFolder(folder.id); }}
+                                  title="Delete forever"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={(e) => { e.stopPropagation(); handleToggleStarFolder(folder.id); }}
+                                  title={folder.is_starred ? "Remove star" : "Add star"}
+                                >
+                                  {folder.is_starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
+                                </button>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={(e) => { e.stopPropagation(); handleShare(folder, 'folder'); }}
+                                  title="Share"
+                                >
+                                  <Share2 size={16} />
+                                </button>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+                                  title="Move to trash"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
-                  
-                  {displayFiles.length > 0 && (
+
+                  {currentView !== 'recent' && displayFiles.length > 0 && (
                     <div className="file-section">
                       {displayFolders.length > 0 && <div className="section-header">Files</div>}
                       {displayFiles.map((file) => (
@@ -666,8 +1171,11 @@ const Dashboard = ({ view = 'my-drive' }) => {
                           className="file-item"
                           draggable
                           onDragStart={(e) => handleDragStart(e, file, 'file')}
+                          onClick={() => handleFileClick(file)}
+                          onContextMenu={(e) => handleContextMenu(e, file, 'file')}
+                          style={{ cursor: 'pointer' }}
                         >
-                          <div className="file-info">
+                          <div className="file-info" onClick={(e) => e.stopPropagation()}>
                             {getFileIcon(file.name, false)}
                             <span className="file-name">{file.name}</span>
                           </div>
@@ -675,21 +1183,30 @@ const Dashboard = ({ view = 'my-drive' }) => {
                           <div className="file-modified">{formatDate(file.updated_at)}</div>
                           <div className="file-size">{formatFileSize(file.size)}</div>
                           <div className="file-actions">
-                            <button 
+                            <button
                               className="icon-btn-small"
                               onClick={() => handleToggleStar(file.id)}
                               title={file.starred ? "Remove star" : "Add star"}
                             >
-                              {file.starred ? <Star size={16} fill="currentColor" /> : <StarOff size={16} />}
+                              {file.starred ? <Star size={16} fill="#fbbc04" color="#fbbc04" /> : <StarOff size={16} />}
                             </button>
                             {currentView === 'trash' ? (
-                              <button 
-                                className="icon-btn-small"
-                                onClick={() => handleRestore(file.id)}
-                                title="Restore"
-                              >
-                                <Upload size={16} />
-                              </button>
+                              <>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={() => handleRestore(file.id)}
+                                  title="Restore"
+                                >
+                                  <Upload size={16} />
+                                </button>
+                                <button
+                                  className="icon-btn-small"
+                                  onClick={() => handlePermanentDeleteFile(file.id)}
+                                  title="Delete forever"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
@@ -855,6 +1372,62 @@ const Dashboard = ({ view = 'my-drive' }) => {
         onClose={() => setShowAdvancedSearch(false)}
         onSearch={handleSearch}
         folders={folders}
+      />
+
+      {/* File Viewer */}
+      {viewingFile && (
+        <FileViewer
+          file={viewingFile}
+          files={displayFiles}
+          onClose={handleCloseViewer}
+          onFileChange={handleFileChange}
+          onShare={(file) => openShareDialog(file, 'file')}
+          onStar={async (file) => {
+            await handleToggleStar(file.id);
+            setViewingFile({ ...file, is_starred: !file.is_starred });
+          }}
+          onDelete={async (file) => {
+            await handleDelete(file.id);
+            handleCloseViewer();
+          }}
+        />
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          file={contextMenu.type === 'file' ? contextMenu.item : null}
+          folder={contextMenu.type === 'folder' ? contextMenu.item : null}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Activity Panel */}
+      <ActivityPanel
+        isOpen={activityPanelOpen}
+        onClose={() => setActivityPanelOpen(false)}
+      />
+
+      {/* Version History Modal */}
+      <VersionHistoryModal
+        isOpen={!!versionHistoryFile}
+        onClose={() => setVersionHistoryFile(null)}
+        file={versionHistoryFile}
+      />
+
+      {/* Details Panel */}
+      <DetailsPanel
+        item={selectedItemForDetails}
+        type={selectedItemType}
+        isOpen={detailsPanelOpen}
+        onClose={() => {
+          setDetailsPanelOpen(false);
+          setSelectedItemForDetails(null);
+          setSelectedItemType(null);
+        }}
       />
     </div>
   );

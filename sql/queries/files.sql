@@ -9,6 +9,9 @@ RETURNING *;
 -- name: GetFileByID :one
 SELECT * FROM files WHERE id = $1 AND status = 'active';
 
+-- name: GetFileByIDAnyStatus :one
+SELECT * FROM files WHERE id = $1;
+
 -- name: GetFilesByFolder :many
 SELECT * FROM files
 WHERE owner_id = $1

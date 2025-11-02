@@ -98,6 +98,36 @@ func (q *Queries) GetFileByID(ctx context.Context, id pgtype.UUID) (File, error)
 	return i, err
 }
 
+const getFileByIDAnyStatus = `-- name: GetFileByIDAnyStatus :one
+SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files WHERE id = $1
+`
+
+func (q *Queries) GetFileByIDAnyStatus(ctx context.Context, id pgtype.UUID) (File, error) {
+	row := q.db.QueryRow(ctx, getFileByIDAnyStatus, id)
+	var i File
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OriginalName,
+		&i.MimeType,
+		&i.Size,
+		&i.StoragePath,
+		&i.OwnerID,
+		&i.ParentFolderID,
+		&i.Status,
+		&i.IsStarred,
+		&i.ThumbnailPath,
+		&i.PreviewAvailable,
+		&i.Version,
+		&i.CurrentVersionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TrashedAt,
+		&i.LastAccessedAt,
+	)
+	return i, err
+}
+
 const getFilesByFolder = `-- name: GetFilesByFolder :many
 SELECT id, name, original_name, mime_type, size, storage_path, owner_id, parent_folder_id, status, is_starred, thumbnail_path, preview_available, version, current_version_id, created_at, updated_at, trashed_at, last_accessed_at FROM files
 WHERE owner_id = $1

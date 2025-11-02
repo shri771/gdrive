@@ -296,3 +296,197 @@ func (h *FoldersHandler) MoveFolder(w http.ResponseWriter, r *http.Request) {
 		"message": "folder moved successfully",
 	})
 }
+
+// GetStarredFolders returns starred folders
+func (h *FoldersHandler) GetStarredFolders(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folders, err := h.queries.GetStarredFolders(r.Context(), session.UserID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to get starred folders")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(folders)
+}
+
+// ToggleStarFolder toggles the starred status of a folder
+func (h *FoldersHandler) ToggleStarFolder(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folderIDStr := chi.URLParam(r, "id")
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
+		return
+	}
+
+	// Get folder to check ownership
+	dbFolder, err := h.queries.GetFolderByID(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "folder not found")
+		return
+	}
+
+	if dbFolder.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Toggle star
+	if err := h.queries.ToggleStarFolder(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to toggle star")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "star toggled",
+	})
+}
+
+// DeleteFolder moves a folder to trash
+func (h *FoldersHandler) DeleteFolder(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folderIDStr := chi.URLParam(r, "id")
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
+		return
+	}
+
+	// Get folder to check ownership
+	dbFolder, err := h.queries.GetFolderByID(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "folder not found")
+		return
+	}
+
+	if dbFolder.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Can't delete root folder
+	if dbFolder.IsRoot.Bool {
+		respondWithError(w, http.StatusBadRequest, "cannot delete root folder")
+		return
+	}
+
+	// Trash folder
+	if err := h.queries.TrashFolder(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to trash folder")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "folder moved to trash",
+	})
+}
+
+// RestoreFolder restores a folder from trash
+func (h *FoldersHandler) RestoreFolder(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folderIDStr := chi.URLParam(r, "id")
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
+		return
+	}
+
+	// Get folder to check ownership (can be trashed)
+	dbFolder, err := h.queries.GetFolderByIDAnyStatus(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "folder not found")
+		return
+	}
+
+	if dbFolder.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Restore folder
+	if err := h.queries.RestoreFolder(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to restore folder")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "folder restored",
+	})
+}
+
+// GetTrashedFolders returns trashed folders
+func (h *FoldersHandler) GetTrashedFolders(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folders, err := h.queries.GetTrashedFolders(r.Context(), session.UserID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to get trashed folders")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(folders)
+}
+
+// PermanentDeleteFolder permanently deletes a folder
+func (h *FoldersHandler) PermanentDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	folderIDStr := chi.URLParam(r, "id")
+	folderID, err := uuid.Parse(folderIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid folder ID")
+		return
+	}
+
+	// Get folder to check ownership (can be trashed)
+	dbFolder, err := h.queries.GetFolderByIDAnyStatus(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "folder not found")
+		return
+	}
+
+	if dbFolder.OwnerID != session.UserID {
+		respondWithError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Permanently delete folder
+	if err := h.queries.PermanentDeleteFolder(r.Context(), pgtype.UUID{Bytes: folderID, Valid: true}); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to permanently delete folder")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "folder permanently deleted",
+	})
+}

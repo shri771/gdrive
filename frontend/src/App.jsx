@@ -19,10 +19,34 @@ const App = () => {
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" />} />
       <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to="/" />} />
       <Route
-        path="/*"
+        path="/"
         element={
           <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <Dashboard />
+            <Dashboard view="my-drive" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recent"
+        element={
+          <ProtectedRoute isAuthenticated={isAuthenticated}>
+            <Dashboard view="recent" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/starred"
+        element={
+          <ProtectedRoute isAuthenticated={isAuthenticated}>
+            <Dashboard view="starred" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trash"
+        element={
+          <ProtectedRoute isAuthenticated={isAuthenticated}>
+            <Dashboard view="trash" />
           </ProtectedRoute>
         }
       />

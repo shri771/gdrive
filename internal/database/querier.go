@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
+	CreateFileVersion(ctx context.Context, arg CreateFileVersionParams) (FileVersion, error)
 	CreateFolder(ctx context.Context, arg CreateFolderParams) (Folder, error)
 	CreatePermission(ctx context.Context, arg CreatePermissionParams) (Permission, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
@@ -19,15 +20,21 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateShare(ctx context.Context, id pgtype.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
+	DeleteFileVersions(ctx context.Context, fileID pgtype.UUID) error
 	DeleteSession(ctx context.Context, token string) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	GetFileActivity(ctx context.Context, arg GetFileActivityParams) ([]GetFileActivityRow, error)
 	GetFileByID(ctx context.Context, id pgtype.UUID) (File, error)
+	GetFileByIDAnyStatus(ctx context.Context, id pgtype.UUID) (File, error)
+	GetFileVersion(ctx context.Context, id pgtype.UUID) (GetFileVersionRow, error)
+	GetFileVersions(ctx context.Context, fileID pgtype.UUID) ([]GetFileVersionsRow, error)
 	GetFilesByFolder(ctx context.Context, arg GetFilesByFolderParams) ([]File, error)
 	GetFilesByOwner(ctx context.Context, arg GetFilesByOwnerParams) ([]File, error)
 	GetFolderByID(ctx context.Context, id pgtype.UUID) (Folder, error)
+	GetFolderByIDAnyStatus(ctx context.Context, id pgtype.UUID) (Folder, error)
 	GetFoldersByOwner(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error)
 	GetItemPermissions(ctx context.Context, arg GetItemPermissionsParams) ([]GetItemPermissionsRow, error)
+	GetLatestVersionNumber(ctx context.Context, fileID pgtype.UUID) (interface{}, error)
 	GetRecentFiles(ctx context.Context, arg GetRecentFilesParams) ([]File, error)
 	GetRootFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error)
 	GetRootFolder(ctx context.Context, ownerID pgtype.UUID) (Folder, error)
@@ -38,9 +45,11 @@ type Querier interface {
 	GetSharedWithMeFolders(ctx context.Context, userID pgtype.UUID) ([]GetSharedWithMeFoldersRow, error)
 	GetSharesByItem(ctx context.Context, arg GetSharesByItemParams) ([]Share, error)
 	GetStarredFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error)
+	GetStarredFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error)
 	GetStorageUsage(ctx context.Context, id pgtype.UUID) (GetStorageUsageRow, error)
 	GetSubfolders(ctx context.Context, parentFolderID pgtype.UUID) ([]Folder, error)
 	GetTrashedFiles(ctx context.Context, ownerID pgtype.UUID) ([]File, error)
+	GetTrashedFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error)
 	GetUserActivity(ctx context.Context, arg GetUserActivityParams) ([]GetUserActivityRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
@@ -49,6 +58,7 @@ type Querier interface {
 	MoveFile(ctx context.Context, arg MoveFileParams) error
 	MoveFolder(ctx context.Context, arg MoveFolderParams) error
 	PermanentDeleteFile(ctx context.Context, id pgtype.UUID) error
+	PermanentDeleteFolder(ctx context.Context, id pgtype.UUID) error
 	RenameFile(ctx context.Context, arg RenameFileParams) error
 	RenameFolder(ctx context.Context, arg RenameFolderParams) error
 	RestoreFile(ctx context.Context, id pgtype.UUID) error
@@ -58,6 +68,7 @@ type Querier interface {
 	SearchFilesByType(ctx context.Context, arg SearchFilesByTypeParams) ([]File, error)
 	SearchUsersByEmail(ctx context.Context, dollar_1 pgtype.Text) ([]SearchUsersByEmailRow, error)
 	ToggleStarFile(ctx context.Context, id pgtype.UUID) error
+	ToggleStarFolder(ctx context.Context, id pgtype.UUID) error
 	TrashFile(ctx context.Context, id pgtype.UUID) error
 	TrashFolder(ctx context.Context, id pgtype.UUID) error
 	UpdateLastAccessed(ctx context.Context, id pgtype.UUID) error

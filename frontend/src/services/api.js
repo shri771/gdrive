@@ -104,6 +104,11 @@ export const filesAPI = {
     return response.data;
   },
 
+  permanentDeleteFile: async (fileId) => {
+    const response = await api.delete(`/files/${fileId}/permanent`);
+    return response.data;
+  },
+
   toggleStar: async (fileId) => {
     const response = await api.post(`/files/${fileId}/star`);
     return response.data;
@@ -187,6 +192,36 @@ export const foldersAPI = {
     });
     return response.data;
   },
+
+  getStarredFolders: async () => {
+    const response = await api.get('/folders/starred');
+    return response.data;
+  },
+
+  toggleStarFolder: async (folderId) => {
+    const response = await api.post(`/folders/${folderId}/star`);
+    return response.data;
+  },
+
+  deleteFolder: async (folderId) => {
+    const response = await api.delete(`/folders/${folderId}`);
+    return response.data;
+  },
+
+  restoreFolder: async (folderId) => {
+    const response = await api.post(`/folders/${folderId}/restore`);
+    return response.data;
+  },
+
+  getTrashedFolders: async () => {
+    const response = await api.get('/folders/trash');
+    return response.data;
+  },
+
+  permanentDeleteFolder: async (folderId) => {
+    const response = await api.delete(`/folders/${folderId}/permanent`);
+    return response.data;
+  },
 };
 
 // Sharing API
@@ -245,6 +280,32 @@ export const sharingAPI = {
   // Shared with me
   getSharedWithMe: async () => {
     const response = await api.get('/sharing/shared-with-me');
+    return response.data;
+  },
+};
+
+// Activity API
+export const activityAPI = {
+  getUserActivity: async (limit = 50) => {
+    const response = await api.get(`/activity?limit=${limit}`);
+    return response.data;
+  },
+
+  getFileActivity: async (fileId, limit = 20) => {
+    const response = await api.get(`/activity/file?file_id=${fileId}&limit=${limit}`);
+    return response.data;
+  },
+};
+
+// Versions API
+export const versionsAPI = {
+  getFileVersions: async (fileId) => {
+    const response = await api.get(`/versions/file/${fileId}`);
+    return response.data;
+  },
+
+  getFileVersion: async (versionId) => {
+    const response = await api.get(`/versions/${versionId}`);
     return response.data;
   },
 };

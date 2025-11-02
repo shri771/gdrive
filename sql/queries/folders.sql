@@ -6,6 +6,9 @@ RETURNING *;
 -- name: GetFolderByID :one
 SELECT * FROM folders WHERE id = $1 AND status = 'active';
 
+-- name: GetFolderByIDAnyStatus :one
+SELECT * FROM folders WHERE id = $1;
+
 -- name: GetSubfolders :many
 SELECT * FROM folders
 WHERE parent_folder_id = $1 AND status = 'active'
@@ -36,6 +39,16 @@ UPDATE folders
 SET status = 'active', trashed_at = NULL
 WHERE id = $1;
 
+-- name: PermanentDeleteFolder :exec
+UPDATE folders
+SET status = 'deleted'
+WHERE id = $1;
+
+-- name: GetTrashedFolders :many
+SELECT * FROM folders
+WHERE owner_id = $1 AND status = 'trashed'
+ORDER BY trashed_at DESC;
+
 -- name: GetFoldersByOwner :many
 SELECT * FROM folders
 WHERE owner_id = $1 AND status = 'active'
@@ -48,3 +61,13 @@ WHERE owner_id = $1
   AND is_root = FALSE
   AND status = 'active'
 ORDER BY name ASC;
+
+-- name: GetStarredFolders :many
+SELECT * FROM folders
+WHERE owner_id = $1 AND is_starred = TRUE AND status = 'active'
+ORDER BY updated_at DESC;
+
+-- name: ToggleStarFolder :exec
+UPDATE folders
+SET is_starred = NOT is_starred, updated_at = NOW()
+WHERE id = $1;

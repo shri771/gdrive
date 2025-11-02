@@ -69,6 +69,28 @@ func (q *Queries) GetFolderByID(ctx context.Context, id pgtype.UUID) (Folder, er
 	return i, err
 }
 
+const getFolderByIDAnyStatus = `-- name: GetFolderByIDAnyStatus :one
+SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders WHERE id = $1
+`
+
+func (q *Queries) GetFolderByIDAnyStatus(ctx context.Context, id pgtype.UUID) (Folder, error) {
+	row := q.db.QueryRow(ctx, getFolderByIDAnyStatus, id)
+	var i Folder
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OwnerID,
+		&i.ParentFolderID,
+		&i.IsRoot,
+		&i.Status,
+		&i.IsStarred,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TrashedAt,
+	)
+	return i, err
+}
+
 const getFoldersByOwner = `-- name: GetFoldersByOwner :many
 SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
 WHERE owner_id = $1 AND status = 'active'
@@ -170,6 +192,43 @@ func (q *Queries) GetRootFolders(ctx context.Context, ownerID pgtype.UUID) ([]Fo
 	return items, nil
 }
 
+const getStarredFolders = `-- name: GetStarredFolders :many
+SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
+WHERE owner_id = $1 AND is_starred = TRUE AND status = 'active'
+ORDER BY updated_at DESC
+`
+
+func (q *Queries) GetStarredFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error) {
+	rows, err := q.db.Query(ctx, getStarredFolders, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Folder{}
+	for rows.Next() {
+		var i Folder
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.IsRoot,
+			&i.Status,
+			&i.IsStarred,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSubfolders = `-- name: GetSubfolders :many
 SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
 WHERE parent_folder_id = $1 AND status = 'active'
@@ -178,6 +237,43 @@ ORDER BY name ASC
 
 func (q *Queries) GetSubfolders(ctx context.Context, parentFolderID pgtype.UUID) ([]Folder, error) {
 	rows, err := q.db.Query(ctx, getSubfolders, parentFolderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Folder{}
+	for rows.Next() {
+		var i Folder
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.OwnerID,
+			&i.ParentFolderID,
+			&i.IsRoot,
+			&i.Status,
+			&i.IsStarred,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrashedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTrashedFolders = `-- name: GetTrashedFolders :many
+SELECT id, name, owner_id, parent_folder_id, is_root, status, is_starred, created_at, updated_at, trashed_at FROM folders
+WHERE owner_id = $1 AND status = 'trashed'
+ORDER BY trashed_at DESC
+`
+
+func (q *Queries) GetTrashedFolders(ctx context.Context, ownerID pgtype.UUID) ([]Folder, error) {
+	rows, err := q.db.Query(ctx, getTrashedFolders, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +319,17 @@ func (q *Queries) MoveFolder(ctx context.Context, arg MoveFolderParams) error {
 	return err
 }
 
+const permanentDeleteFolder = `-- name: PermanentDeleteFolder :exec
+UPDATE folders
+SET status = 'deleted'
+WHERE id = $1
+`
+
+func (q *Queries) PermanentDeleteFolder(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, permanentDeleteFolder, id)
+	return err
+}
+
 const renameFolder = `-- name: RenameFolder :exec
 UPDATE folders
 SET name = $2, updated_at = NOW()
@@ -247,6 +354,17 @@ WHERE id = $1
 
 func (q *Queries) RestoreFolder(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, restoreFolder, id)
+	return err
+}
+
+const toggleStarFolder = `-- name: ToggleStarFolder :exec
+UPDATE folders
+SET is_starred = NOT is_starred, updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) ToggleStarFolder(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, toggleStarFolder, id)
 	return err
 }
 

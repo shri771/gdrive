@@ -88,6 +88,8 @@ func main() {
 	filesHandler := handlers.NewFilesHandler(queries, storageService, dbPool)
 	foldersHandler := handlers.NewFoldersHandler(queries)
 	sharingHandler := handlers.NewSharingHandler(queries, authService)
+	versionsHandler := handlers.NewVersionsHandler(queries)
+	activityHandler := handlers.NewActivityHandler(queries)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -133,6 +135,7 @@ func main() {
 				r.Get("/thumbnail", filesHandler.GetThumbnail)
 				r.Delete("/", filesHandler.DeleteFile)
 				r.Post("/restore", filesHandler.RestoreFile)
+				r.Delete("/permanent", filesHandler.PermanentDeleteFile)
 				r.Post("/star", filesHandler.ToggleStar)
 				r.Put("/rename", filesHandler.RenameFile)
 				r.Put("/move", filesHandler.MoveFile)
@@ -144,10 +147,16 @@ func main() {
 			r.Get("/", foldersHandler.GetFolders)
 			r.Post("/", foldersHandler.CreateFolder)
 			r.Get("/root", foldersHandler.GetRootFolder)
+			r.Get("/starred", foldersHandler.GetStarredFolders)
+			r.Get("/trash", foldersHandler.GetTrashedFolders)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", foldersHandler.GetFolderByIDHandler)
 				r.Put("/rename", foldersHandler.RenameFolder)
 				r.Put("/move", foldersHandler.MoveFolder)
+				r.Post("/star", foldersHandler.ToggleStarFolder)
+				r.Delete("/", foldersHandler.DeleteFolder)
+				r.Post("/restore", foldersHandler.RestoreFolder)
+				r.Delete("/permanent", foldersHandler.PermanentDeleteFolder)
 			})
 		})
 
@@ -160,6 +169,18 @@ func main() {
 			r.Get("/links", sharingHandler.GetShareLinks)
 			r.Delete("/link/{id}", sharingHandler.DeactivateShareLink)
 			r.Get("/shared-with-me", sharingHandler.GetSharedWithMe)
+		})
+
+		// Version history routes
+		r.Route("/versions", func(r chi.Router) {
+			r.Get("/file/{fileId}", versionsHandler.GetFileVersions)
+			r.Get("/{versionId}", versionsHandler.GetFileVersion)
+		})
+
+		// Activity routes
+		r.Route("/activity", func(r chi.Router) {
+			r.Get("/", activityHandler.GetUserActivity)
+			r.Get("/file", activityHandler.GetFileActivity)
 		})
 	})
 
