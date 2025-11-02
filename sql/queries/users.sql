@@ -17,3 +17,8 @@ WHERE id = $1;
 
 -- name: GetStorageUsage :one
 SELECT storage_used, storage_limit FROM users WHERE id = $1;
+
+-- name: SearchUsersByEmail :many
+SELECT id, email, name, created_at FROM users
+WHERE email ILIKE '%' || $1 || '%'
+LIMIT 10;

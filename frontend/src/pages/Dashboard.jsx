@@ -6,9 +6,10 @@ import { useDropzone } from 'react-dropzone';
 import {
   Search, Grid3x3, List, Settings, HelpCircle, Menu, Home,
   Clock, Star, Trash2, Upload, FolderPlus, ChevronDown,
-  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2
+  Download, StarOff, X, FileText, File, Folder, MoreVertical, Share2, SlidersHorizontal
 } from 'lucide-react';
 import ShareDialog from '../components/ShareDialog';
+import AdvancedSearch from '../components/AdvancedSearch';
 import './Dashboard.css';
 
 const Dashboard = ({ view = 'my-drive' }) => {
@@ -29,6 +30,9 @@ const Dashboard = ({ view = 'my-drive' }) => {
   const [folderPath, setFolderPath] = useState([{ id: null, name: 'My Drive' }]);
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragOverFolder, setDragOverFolder] = useState(null);
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchResults, setSearchResults] = useState({ files: [], folders: [] });
   const fileInputRef = useRef(null);
 
   const currentView = view || (location.pathname === '/recent' ? 'recent' :
@@ -80,6 +84,10 @@ const Dashboard = ({ view = 'my-drive' }) => {
     }
   }, [currentView]);
 
+  // Use search results when in search mode, otherwise use regular files/folders
+  const displayFiles = searchMode ? searchResults.files : files;
+  const displayFolders = searchMode ? searchResults.folders : folders;
+
   const onDrop = useCallback(async (acceptedFiles) => {
     setUploading(true);
     try {
@@ -103,6 +111,32 @@ const Dashboard = ({ view = 'my-drive' }) => {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleSearch = async (filters) => {
+    try {
+      setLoading(true);
+      const results = await filesAPI.searchFiles(filters);
+      setSearchResults(results);
+      setSearchMode(true);
+    } catch (error) {
+      console.error('Search error:', error);
+      alert('Failed to perform search');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickSearch = async (e) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      await handleSearch({ query: searchQuery, status: 'active' });
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchMode(false);
+    setSearchQuery('');
+    setSearchResults({ files: [], folders: [] });
   };
 
   const handleDownload = async (file) => {
@@ -362,7 +396,15 @@ const Dashboard = ({ view = 'my-drive' }) => {
               placeholder="Search in Drive"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={handleQuickSearch}
             />
+            <button
+              className="icon-btn advanced-search-btn"
+              onClick={() => setShowAdvancedSearch(true)}
+              title="Advanced search"
+            >
+              <SlidersHorizontal size={18} />
+            </button>
           </div>
         </div>
 
@@ -498,7 +540,31 @@ const Dashboard = ({ view = 'my-drive' }) => {
           </div>
 
           {/* Breadcrumb Navigation */}
-          {currentView === 'my-drive' && folderPath.length > 0 && (
+          {searchMode ? (
+            <div className="breadcrumb-nav" style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '14px', color: '#202124' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Search size={18} />
+                <span style={{ fontWeight: '500' }}>
+                  Search results ({searchResults.files.length + searchResults.folders.length} items)
+                </span>
+              </div>
+              <button
+                onClick={clearSearch}
+                style={{
+                  background: '#1a73e8',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 16px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                }}
+              >
+                Clear search
+              </button>
+            </div>
+          ) : currentView === 'my-drive' && folderPath.length > 0 && (
             <div className="breadcrumb-nav" style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#5f6368' }}>
               {folderPath.map((folder, index) => (
                 <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -548,10 +614,10 @@ const Dashboard = ({ view = 'my-drive' }) => {
             <>
               {viewMode === 'list' ? (
                 <div className="file-list">
-                  {folders.length > 0 && (
+                  {displayFolders.length > 0 && (
                     <div className="file-section">
                       <div className="section-header">Folders</div>
-                      {folders.map((folder) => (
+                      {displayFolders.map((folder) => (
                         <div
                           key={folder.id}
                           className="file-item"
@@ -591,10 +657,10 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     </div>
                   )}
                   
-                  {files.length > 0 && (
+                  {displayFiles.length > 0 && (
                     <div className="file-section">
-                      {folders.length > 0 && <div className="section-header">Files</div>}
-                      {files.map((file) => (
+                      {displayFolders.length > 0 && <div className="section-header">Files</div>}
+                      {displayFiles.map((file) => (
                         <div
                           key={file.id}
                           className="file-item"
@@ -655,27 +721,33 @@ const Dashboard = ({ view = 'my-drive' }) => {
                     </div>
                   )}
                   
-                  {files.length === 0 && folders.length === 0 && (
+                  {displayFiles.length === 0 && displayFolders.length === 0 && (
                     <div className="empty-state">
-                      {currentView === 'recent' && (
+                      {searchMode && (
+                        <>
+                          <p>No results found</p>
+                          <p className="empty-subtitle">Try adjusting your search filters</p>
+                        </>
+                      )}
+                      {!searchMode && currentView === 'recent' && (
                         <>
                           <p>No recent files</p>
                           <p className="empty-subtitle">Files you open will appear here</p>
                         </>
                       )}
-                      {currentView === 'starred' && (
+                      {!searchMode && currentView === 'starred' && (
                         <>
                           <p>No starred files</p>
                           <p className="empty-subtitle">Star files to easily find them later</p>
                         </>
                       )}
-                      {currentView === 'trash' && (
+                      {!searchMode && currentView === 'trash' && (
                         <>
                           <p>Trash is empty</p>
                           <p className="empty-subtitle">Items in trash will be deleted forever after 30 days</p>
                         </>
                       )}
-                      {currentView === 'my-drive' && (
+                      {!searchMode && currentView === 'my-drive' && (
                         <>
                           <p>No files yet</p>
                           <p className="empty-subtitle">Drop files here or use the New button to upload</p>
@@ -686,7 +758,7 @@ const Dashboard = ({ view = 'my-drive' }) => {
                 </div>
               ) : (
                 <div className="file-grid">
-                  {folders.map((folder) => (
+                  {displayFolders.map((folder) => (
                     <div
                       key={folder.id}
                       className="grid-item"
@@ -727,27 +799,33 @@ const Dashboard = ({ view = 'my-drive' }) => {
                       </div>
                     </div>
                   ))}
-                  {files.length === 0 && folders.length === 0 && (
+                  {displayFiles.length === 0 && displayFolders.length === 0 && (
                     <div className="empty-state">
-                      {currentView === 'recent' && (
+                      {searchMode && (
+                        <>
+                          <p>No results found</p>
+                          <p className="empty-subtitle">Try adjusting your search filters</p>
+                        </>
+                      )}
+                      {!searchMode && currentView === 'recent' && (
                         <>
                           <p>No recent files</p>
                           <p className="empty-subtitle">Files you open will appear here</p>
                         </>
                       )}
-                      {currentView === 'starred' && (
+                      {!searchMode && currentView === 'starred' && (
                         <>
                           <p>No starred files</p>
                           <p className="empty-subtitle">Star files to easily find them later</p>
                         </>
                       )}
-                      {currentView === 'trash' && (
+                      {!searchMode && currentView === 'trash' && (
                         <>
                           <p>Trash is empty</p>
                           <p className="empty-subtitle">Items in trash will be deleted forever after 30 days</p>
                         </>
                       )}
-                      {currentView === 'my-drive' && (
+                      {!searchMode && currentView === 'my-drive' && (
                         <>
                           <p>No files yet</p>
                           <p className="empty-subtitle">Drop files here or use the New button to upload</p>
@@ -770,6 +848,14 @@ const Dashboard = ({ view = 'my-drive' }) => {
           onClose={closeShareDialog}
         />
       )}
+
+      {/* Advanced Search */}
+      <AdvancedSearch
+        isOpen={showAdvancedSearch}
+        onClose={() => setShowAdvancedSearch(false)}
+        onSearch={handleSearch}
+        folders={folders}
+      />
     </div>
   );
 };

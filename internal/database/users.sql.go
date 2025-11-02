@@ -95,6 +95,44 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	return i, err
 }
 
+const searchUsersByEmail = `-- name: SearchUsersByEmail :many
+SELECT id, email, name, created_at FROM users
+WHERE email ILIKE '%' || $1 || '%'
+LIMIT 10
+`
+
+type SearchUsersByEmailRow struct {
+	ID        pgtype.UUID      `json:"id"`
+	Email     string           `json:"email"`
+	Name      string           `json:"name"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
+func (q *Queries) SearchUsersByEmail(ctx context.Context, dollar_1 pgtype.Text) ([]SearchUsersByEmailRow, error) {
+	rows, err := q.db.Query(ctx, searchUsersByEmail, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchUsersByEmailRow{}
+	for rows.Next() {
+		var i SearchUsersByEmailRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateUserStorage = `-- name: UpdateUserStorage :exec
 UPDATE users
 SET storage_used = storage_used + $2,

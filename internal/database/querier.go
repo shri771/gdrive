@@ -56,6 +56,7 @@ type Querier interface {
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
 	SearchFilesByName(ctx context.Context, arg SearchFilesByNameParams) ([]File, error)
 	SearchFilesByType(ctx context.Context, arg SearchFilesByTypeParams) ([]File, error)
+	SearchUsersByEmail(ctx context.Context, dollar_1 pgtype.Text) ([]SearchUsersByEmailRow, error)
 	ToggleStarFile(ctx context.Context, id pgtype.UUID) error
 	TrashFile(ctx context.Context, id pgtype.UUID) error
 	TrashFolder(ctx context.Context, id pgtype.UUID) error

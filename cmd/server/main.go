@@ -85,7 +85,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(queries, authService)
-	filesHandler := handlers.NewFilesHandler(queries, storageService)
+	filesHandler := handlers.NewFilesHandler(queries, storageService, dbPool)
 	foldersHandler := handlers.NewFoldersHandler(queries)
 	sharingHandler := handlers.NewSharingHandler(queries, authService)
 
@@ -115,6 +115,9 @@ func main() {
 
 		// Auth routes
 		r.Post("/auth/logout", authHandler.Logout)
+
+		// User search
+		r.Get("/users/search", authHandler.SearchUsers)
 
 		// File routes
 		r.Route("/files", func(r chi.Router) {

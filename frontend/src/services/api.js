@@ -129,8 +129,21 @@ export const filesAPI = {
     return response.data;
   },
 
-  searchFiles: async (query) => {
-    const response = await api.get(`/files/search?q=${encodeURIComponent(query)}`);
+  searchFiles: async (filters) => {
+    // Build query string from filters object
+    const params = new URLSearchParams();
+
+    if (filters.query) params.append('q', filters.query);
+    if (filters.fileType) params.append('fileType', filters.fileType);
+    if (filters.owner) params.append('owner', filters.owner);
+    if (filters.folderId) params.append('folderId', filters.folderId);
+    if (filters.dateModifiedType) params.append('dateModifiedType', filters.dateModifiedType);
+    if (filters.dateModifiedStart) params.append('dateModifiedStart', filters.dateModifiedStart);
+    if (filters.dateModifiedEnd) params.append('dateModifiedEnd', filters.dateModifiedEnd);
+    if (filters.isStarred) params.append('isStarred', filters.isStarred);
+    if (filters.status) params.append('status', filters.status);
+
+    const response = await api.get(`/files/search?${params.toString()}`);
     return response.data;
   },
 
@@ -178,6 +191,7 @@ export const foldersAPI = {
 
 // Sharing API
 export const sharingAPI = {
+  // Link sharing
   createShareLink: async (itemType, itemId, permission = 'viewer') => {
     const response = await api.post('/sharing/link', {
       item_type: itemType,
@@ -197,8 +211,40 @@ export const sharingAPI = {
     return response.data;
   },
 
+  // User permissions
   getItemPermissions: async (itemType, itemId) => {
     const response = await api.get(`/sharing/permissions?item_type=${itemType}&item_id=${itemId}`);
+    return response.data;
+  },
+
+  shareWithUser: async (itemType, itemId, userId, role) => {
+    const response = await api.post('/sharing/share', {
+      item_type: itemType,
+      item_id: itemId,
+      user_id: userId,
+      role,
+    });
+    return response.data;
+  },
+
+  revokePermission: async (itemType, itemId, userId) => {
+    const response = await api.post('/sharing/revoke', {
+      item_type: itemType,
+      item_id: itemId,
+      user_id: userId,
+    });
+    return response.data;
+  },
+
+  // User search
+  searchUsers: async (query) => {
+    const response = await api.get(`/users/search?q=${encodeURIComponent(query)}`);
+    return response.data;
+  },
+
+  // Shared with me
+  getSharedWithMe: async () => {
+    const response = await api.get('/sharing/shared-with-me');
     return response.data;
   },
 };

@@ -18,12 +18,14 @@ import (
 type FilesHandler struct {
 	queries        *database.Queries
 	storageService *services.StorageService
+	db             database.DBTX
 }
 
-func NewFilesHandler(queries *database.Queries, storageService *services.StorageService) *FilesHandler {
+func NewFilesHandler(queries *database.Queries, storageService *services.StorageService, db database.DBTX) *FilesHandler {
 	return &FilesHandler{
 		queries:        queries,
 		storageService: storageService,
+		db:             db,
 	}
 }
 
@@ -385,28 +387,237 @@ func (h *FilesHandler) ToggleStar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// SearchFiles searches files by name
+// SearchFiles searches files with advanced filters
 func (h *FilesHandler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	session, _ := middleware.GetUserFromContext(r.Context())
 
+	// Parse query parameters
 	query := r.URL.Query().Get("q")
-	if query == "" {
-		respondWithError(w, http.StatusBadRequest, "search query required")
-		return
+	fileType := r.URL.Query().Get("fileType")
+	owner := r.URL.Query().Get("owner")
+	folderId := r.URL.Query().Get("folderId")
+	dateModifiedType := r.URL.Query().Get("dateModifiedType")
+	dateModifiedStart := r.URL.Query().Get("dateModifiedStart")
+	dateModifiedEnd := r.URL.Query().Get("dateModifiedEnd")
+	isStarred := r.URL.Query().Get("isStarred")
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "active"
 	}
 
-	files, err := h.queries.SearchFilesByName(r.Context(), database.SearchFilesByNameParams{
-		OwnerID:        session.UserID,
-		PlaintoTsquery: query,
-		Limit:          50,
-	})
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to search files")
-		return
+	// Build dynamic query
+	sqlQuery := `SELECT * FROM files WHERE 1=1`
+	args := []interface{}{}
+	argCount := 1
+
+	// Owner filter
+	if owner == "me" || owner == "" || owner == "anyone" {
+		sqlQuery += fmt.Sprintf(" AND owner_id = $%d", argCount)
+		args = append(args, session.UserID)
+		argCount++
+	}
+
+	// Text search
+	if query != "" {
+		sqlQuery += fmt.Sprintf(" AND to_tsvector('english', name) @@ plainto_tsquery('english', $%d)", argCount)
+		args = append(args, query)
+		argCount++
+	}
+
+	// File type filter
+	if fileType != "" && fileType != "folder" {
+		mimePattern := getMimeTypePattern(fileType)
+		if mimePattern != "" {
+			sqlQuery += fmt.Sprintf(" AND mime_type LIKE $%d", argCount)
+			args = append(args, mimePattern+"%")
+			argCount++
+		}
+	}
+
+	// Folder filter
+	if folderId != "" {
+		folderUUID, err := uuid.Parse(folderId)
+		if err == nil {
+			sqlQuery += fmt.Sprintf(" AND parent_folder_id = $%d", argCount)
+			args = append(args, folderUUID)
+			argCount++
+		}
+	}
+
+	// Date modified filter
+	if dateModifiedType != "" {
+		dateFilter := getDateFilter(dateModifiedType, dateModifiedStart, dateModifiedEnd)
+		if dateFilter != "" {
+			sqlQuery += " AND " + dateFilter
+		}
+	}
+
+	// Starred filter
+	if isStarred == "true" {
+		sqlQuery += " AND is_starred = TRUE"
+	} else if isStarred == "false" {
+		sqlQuery += " AND is_starred = FALSE"
+	}
+
+	// Status filter
+	if status != "" && status != "all" {
+		sqlQuery += fmt.Sprintf(" AND status = $%d", argCount)
+		args = append(args, status)
+		argCount++
+	}
+
+	sqlQuery += " ORDER BY updated_at DESC LIMIT 100"
+
+	// Search response structure
+	type SearchResponse struct {
+		Files   []database.File   `json:"files"`
+		Folders []database.Folder `json:"folders"`
+	}
+
+	response := SearchResponse{
+		Files:   []database.File{},
+		Folders: []database.Folder{},
+	}
+
+	// Search files (if not exclusively searching for folders)
+	if fileType != "folder" {
+		rows, err := h.db.Query(r.Context(), sqlQuery, args...)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to search files")
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var file database.File
+			err := rows.Scan(
+				&file.ID, &file.Name, &file.OriginalName, &file.MimeType,
+				&file.Size, &file.StoragePath, &file.OwnerID, &file.ParentFolderID,
+				&file.Status, &file.IsStarred, &file.ThumbnailPath, &file.PreviewAvailable,
+				&file.Version, &file.CurrentVersionID, &file.CreatedAt, &file.UpdatedAt,
+				&file.TrashedAt, &file.LastAccessedAt,
+			)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "failed to parse file results")
+				return
+			}
+			response.Files = append(response.Files, file)
+		}
+	}
+
+	// Search folders (if fileType is "folder" or not specified)
+	if fileType == "" || fileType == "folder" {
+		folderQuery := `SELECT * FROM folders WHERE 1=1`
+		folderArgs := []interface{}{}
+		folderArgCount := 1
+
+		// Owner filter
+		if owner == "me" || owner == "" || owner == "anyone" {
+			folderQuery += fmt.Sprintf(" AND owner_id = $%d", folderArgCount)
+			folderArgs = append(folderArgs, session.UserID)
+			folderArgCount++
+		}
+
+		// Text search
+		if query != "" {
+			folderQuery += fmt.Sprintf(" AND to_tsvector('english', name) @@ plainto_tsquery('english', $%d)", folderArgCount)
+			folderArgs = append(folderArgs, query)
+			folderArgCount++
+		}
+
+		// Folder location filter
+		if folderId != "" {
+			folderUUID, err := uuid.Parse(folderId)
+			if err == nil {
+				folderQuery += fmt.Sprintf(" AND parent_folder_id = $%d", folderArgCount)
+				folderArgs = append(folderArgs, folderUUID)
+				folderArgCount++
+			}
+		}
+
+		// Date modified filter
+		if dateModifiedType != "" {
+			dateFilter := getDateFilter(dateModifiedType, dateModifiedStart, dateModifiedEnd)
+			if dateFilter != "" {
+				folderQuery += " AND " + dateFilter
+			}
+		}
+
+		// Starred filter
+		if isStarred == "true" {
+			folderQuery += " AND is_starred = TRUE"
+		} else if isStarred == "false" {
+			folderQuery += " AND is_starred = FALSE"
+		}
+
+		// Status filter
+		if status != "" && status != "all" {
+			folderQuery += fmt.Sprintf(" AND status = $%d", folderArgCount)
+			folderArgs = append(folderArgs, status)
+			folderArgCount++
+		}
+
+		folderQuery += " AND is_root = FALSE ORDER BY updated_at DESC LIMIT 100"
+
+		folderRows, err := h.db.Query(r.Context(), folderQuery, folderArgs...)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to search folders")
+			return
+		}
+		defer folderRows.Close()
+
+		for folderRows.Next() {
+			var folder database.Folder
+			err := folderRows.Scan(
+				&folder.ID, &folder.Name, &folder.OwnerID, &folder.ParentFolderID,
+				&folder.IsRoot, &folder.Status, &folder.IsStarred,
+				&folder.CreatedAt, &folder.UpdatedAt, &folder.TrashedAt,
+			)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, "failed to parse folder results")
+				return
+			}
+			response.Folders = append(response.Folders, folder)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(files)
+	json.NewEncoder(w).Encode(response)
+}
+
+// getMimeTypePattern returns MIME type pattern for file type
+func getMimeTypePattern(fileType string) string {
+	patterns := map[string]string{
+		"image":       "image/",
+		"video":       "video/",
+		"audio":       "audio/",
+		"pdf":         "application/pdf",
+		"document":    "application/vnd.openxmlformats-officedocument.wordprocessingml",
+		"spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml",
+		"archive":     "application/zip",
+	}
+	return patterns[fileType]
+}
+
+// getDateFilter returns SQL date filter based on type
+func getDateFilter(dateType, startDate, endDate string) string {
+	switch dateType {
+	case "today":
+		return "updated_at >= CURRENT_DATE"
+	case "yesterday":
+		return "updated_at >= CURRENT_DATE - INTERVAL '1 day' AND updated_at < CURRENT_DATE"
+	case "last7days":
+		return "updated_at >= CURRENT_DATE - INTERVAL '7 days'"
+	case "last30days":
+		return "updated_at >= CURRENT_DATE - INTERVAL '30 days'"
+	case "thisYear":
+		return "updated_at >= DATE_TRUNC('year', CURRENT_DATE)"
+	case "custom":
+		if startDate != "" && endDate != "" {
+			return fmt.Sprintf("updated_at >= '%s' AND updated_at <= '%s'", startDate, endDate)
+		}
+	}
+	return ""
 }
 
 type RenameFileRequest struct {

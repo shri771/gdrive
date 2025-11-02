@@ -73,6 +73,15 @@
   color: #202124;
 }
 
+.advanced-search-btn {
+  padding: 6px;
+  margin-left: 4px;
+}
+
+.advanced-search-btn:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
 .icon-btn {
   background: none;
   border: none;

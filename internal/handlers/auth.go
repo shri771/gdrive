@@ -264,3 +264,38 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// SearchUsers searches for users by email (for sharing)
+func (h *AuthHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		respondWithError(w, http.StatusBadRequest, "search query required")
+		return
+	}
+
+	users, err := h.queries.SearchUsersByEmail(r.Context(), pgtype.Text{String: query, Valid: true})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to search users")
+		return
+	}
+
+	// Return limited user info (no sensitive data)
+	type UserSearchResult struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+
+	results := make([]UserSearchResult, 0, len(users))
+	for _, user := range users {
+		userID, _ := user.ID.Value()
+		results = append(results, UserSearchResult{
+			ID:    userID.(string),
+			Email: user.Email,
+			Name:  user.Name,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
