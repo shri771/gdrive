@@ -1,52 +1,43 @@
-
-
+version: "3.8"
 
 services:
-  frontend:
-    image: node:20-alpine
-    working_dir: /app
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-    command: sh -c "npm install && npm run dev -- --host"
-    depends_on:
-      - api
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    ports:
-      - "1030:1030"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - .env
-    command: >
-      sh -c "
-        goose -dir sql/schema postgres \"postgres://postgres:password@postgres:5432/gdrive?sslmode=disable\" up &&
-        /app/bin/server
-      "
-  postgres:
-    image: postgres:13
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: gdrive
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    app:
+        build: .
+        ports:
+            - "1030:1030" # Go binary port
+            - "1573:1573" # NPM dev server port
+        environment:
+            - DATABASE_URL=postgres://user:password@db:5432/mydb?sslmode=disable
+            - DB_HOST=db
+            - DB_PORT=5432
+            - DB_USER=user
+            - DB_PASSWORD=password
+            - DB_NAME=mydb
+            - NODE_ENV=development
+            - JWT_SECRET=a-very-secure-random-string-for-dev-mode
+        depends_on:
+            db:
+                condition: service_healthy
+        volumes:
+            - ./frontend:/app/frontend # Hot reload for NPM dev
+            - ./cmd:/app/cmd # For Go source if needed
+            - ./sql/schema:/app/migrations # <-- ✅ This is the correct line
 
-
+    db:
+        image: postgres:15-alpine
+        environment:
+            - POSTGRES_USER=user
+            - POSTGRES_PASSWORD=password
+            - POSTGRES_DB=mydb
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
 
 volumes:
-
-  postgres_data:
+    postgres_data:
