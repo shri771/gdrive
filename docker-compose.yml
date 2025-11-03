@@ -20,6 +20,7 @@ services:
                 condition: service_healthy
         volumes:
             - ./frontend:/app/frontend # Hot reload for NPM dev
+            - /app/frontend/node_modules
             - ./cmd:/app/cmd # For Go source if needed
             - ./sql/schema:/app/migrations # <-- ✅ This is the correct line
 

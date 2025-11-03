@@ -37,7 +37,6 @@ WORKDIR /app/frontend
 RUN npm install
 
 WORKDIR /app
-COPY frontend ./frontend
 
 COPY sql/schema ./frontend
 # Create migration runner script
